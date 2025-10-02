@@ -11,17 +11,16 @@ import json
 import pandas as pd
 from datetime import datetime
 import io
-import base64
+import os
 from collections import defaultdict
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-change-this'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
 
-# Configuration API - REMPLACEZ PAR VOS CLÉS
+# Configuration API
 SWGOH_HELP_API_URL = "https://api.swgoh.help"
 SWGOH_GG_API_URL = "https://swgoh.gg/api"
-# Pour SWGOH.help, vous aurez besoin d'un token (inscrivez-vous sur swgoh.help)
-API_TOKEN = "YOUR_API_TOKEN_HERE"  # Remplacez par votre token
+API_TOKEN = os.environ.get('SWGOH_API_TOKEN', 'YOUR_API_TOKEN_HERE')
 
 # ==================== BASE DE DONNÉES ====================
 
@@ -35,6 +34,7 @@ def init_db():
         ally_code TEXT PRIMARY KEY,
         name TEXT,
         level INTEGER,
+        guild_name TEXT,
         galactic_power INTEGER,
         character_gp INTEGER,
         ship_gp INTEGER,
@@ -90,6 +90,7 @@ def init_db():
         ally_code TEXT,
         name TEXT,
         description TEXT,
+        event_type TEXT,
         data TEXT,
         created_at TIMESTAMP,
         FOREIGN KEY (ally_code) REFERENCES player_info(ally_code)
@@ -108,22 +109,25 @@ def init_db():
     conn.commit()
     conn.close()
 
+def get_db_connection():
+    """Retourne une connexion à la base de données"""
+    conn = sqlite3.connect('swgoh_data.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
 # ==================== API HELPERS ====================
 
 def fetch_player_data(ally_code):
-    """Récupère les données du joueur via l'API SWGOH.gg (publique et gratuite)"""
+    """Récupère les données du joueur via l'API SWGOH.gg"""
     try:
-        # Nettoie l'ally code (retire les tirets)
         clean_code = ally_code.replace('-', '')
-        
-        # SWGOH.gg API (publique, pas besoin de token)
         url = f"{SWGOH_GG_API_URL}/player/{clean_code}/"
+        
         response = requests.get(url, timeout=10)
         
         if response.status_code == 200:
             return response.json()
         else:
-            # Fallback: données de démo si API non disponible
             return generate_demo_data(clean_code)
     except Exception as e:
         print(f"Erreur API: {e}")
@@ -135,10 +139,11 @@ def generate_demo_data(ally_code):
         'data': {
             'name': 'Demo Player',
             'level': 85,
+            'guild_name': 'Demo Guild',
             'ally_code': ally_code,
-            'galactic_power': 5000000,
-            'character_galactic_power': 3500000,
-            'ship_galactic_power': 1500000,
+            'galactic_power': 5234567,
+            'character_galactic_power': 3654321,
+            'ship_galactic_power': 1580246,
             'roster': [
                 {
                     'base_id': 'ANAKINKNIGHT',
@@ -147,9 +152,24 @@ def generate_demo_data(ally_code):
                     'gear_level': 13,
                     'relic_tier': 7,
                     'power': 28500,
+                    'galactic_power': 28500,
                     'combat_type': 1,
                     'has_ultimate': False,
-                    'mods': []
+                    'mods': [
+                        {
+                            'id': 'mod1',
+                            'slot': 1,
+                            'set': 4,
+                            'level': 15,
+                            'tier': 5,
+                            'rarity': 5,
+                            'primary_stat': {'name': 'Speed', 'value': 30},
+                            'secondary_stats': [
+                                {'name': 'Speed', 'value': 18},
+                                {'name': 'Offense', 'value': 215}
+                            ]
+                        }
+                    ]
                 },
                 {
                     'base_id': 'GRANDMASTERYODA',
@@ -158,6 +178,43 @@ def generate_demo_data(ally_code):
                     'gear_level': 12,
                     'relic_tier': 5,
                     'power': 25000,
+                    'galactic_power': 25000,
+                    'combat_type': 1,
+                    'has_ultimate': False,
+                    'mods': []
+                },
+                {
+                    'base_id': 'DARTHREVAN',
+                    'name': 'Darth Revan',
+                    'level': 85,
+                    'gear_level': 13,
+                    'relic_tier': 8,
+                    'power': 29800,
+                    'galactic_power': 29800,
+                    'combat_type': 1,
+                    'has_ultimate': False,
+                    'mods': []
+                },
+                {
+                    'base_id': 'GENERALKENOBI',
+                    'name': 'General Kenobi',
+                    'level': 85,
+                    'gear_level': 13,
+                    'relic_tier': 7,
+                    'power': 27200,
+                    'galactic_power': 27200,
+                    'combat_type': 1,
+                    'has_ultimate': False,
+                    'mods': []
+                },
+                {
+                    'base_id': 'BASTILASHAN',
+                    'name': 'Bastila Shan',
+                    'level': 85,
+                    'gear_level': 12,
+                    'relic_tier': 6,
+                    'power': 26100,
+                    'galactic_power': 26100,
                     'combat_type': 1,
                     'has_ultimate': False,
                     'mods': []
@@ -168,7 +225,7 @@ def generate_demo_data(ally_code):
 
 def save_player_data(ally_code, data):
     """Sauvegarde les données du joueur dans la base de données"""
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     c = conn.cursor()
     
     try:
@@ -176,17 +233,18 @@ def save_player_data(ally_code, data):
         
         # Sauvegarde infos joueur
         c.execute('''INSERT OR REPLACE INTO player_info 
-                     (ally_code, name, level, galactic_power, character_gp, ship_gp, last_updated)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                     (ally_code, name, level, guild_name, galactic_power, character_gp, ship_gp, last_updated)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                   (ally_code, 
                    player_data.get('name', 'Unknown'),
                    player_data.get('level', 85),
+                   player_data.get('guild_name', 'No Guild'),
                    player_data.get('galactic_power', 0),
                    player_data.get('character_galactic_power', 0),
                    player_data.get('ship_galactic_power', 0),
                    datetime.now()))
         
-        # Supprime les anciennes données de personnages et mods
+        # Supprime les anciennes données
         c.execute('DELETE FROM characters WHERE ally_code = ?', (ally_code,))
         c.execute('DELETE FROM mods WHERE ally_code = ?', (ally_code,))
         
@@ -220,7 +278,6 @@ def save_player_data(ally_code, data):
 
 def save_mod(cursor, ally_code, character_id, mod_data, is_equipped=True):
     """Sauvegarde un mod dans la base de données"""
-    # Extraction des stats secondaires
     secondary_stats = {}
     for stat in mod_data.get('secondary_stats', []):
         stat_type = stat.get('name', '').lower()
@@ -232,7 +289,6 @@ def save_mod(cursor, ally_code, character_id, mod_data, is_equipped=True):
             secondary_stats['offense'] = stat_value
         elif 'offense' in stat_type and '%' in stat_type:
             secondary_stats['offense_percent'] = stat_value
-        # etc. pour autres stats
     
     cursor.execute('''INSERT OR REPLACE INTO mods 
                    (id, ally_code, character_id, slot, set_type, level, tier, rarity,
@@ -258,20 +314,17 @@ def calculate_character_score(character, mod_config, stat_weights):
     """Calcule un score pour un personnage avec une configuration de mods donnée"""
     score = 0
     
-    # Stats de base du personnage
     base_stats = {
         'speed': 100 + (character['gear_level'] * 5) + (character['relic_tier'] * 10),
         'offense': 1000 + (character['gear_level'] * 100),
         'protection': 10000 + (character['gear_level'] * 1000)
     }
     
-    # Ajoute les stats des mods
     for mod in mod_config:
         base_stats['speed'] += mod.get('speed', 0)
         base_stats['offense'] += mod.get('offense', 0)
         base_stats['protection'] += mod.get('protection', 0)
     
-    # Calcule le score pondéré
     for stat, weight in stat_weights.items():
         score += base_stats.get(stat, 0) * weight
     
@@ -279,38 +332,32 @@ def calculate_character_score(character, mod_config, stat_weights):
 
 def optimize_mods_for_character(ally_code, character_id, stat_weights):
     """Optimise les mods pour un personnage spécifique"""
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     c = conn.cursor()
     
-    # Récupère le personnage
     c.execute('SELECT * FROM characters WHERE ally_code = ? AND base_id = ?', 
               (ally_code, character_id))
-    character = dict(zip([d[0] for d in c.description], c.fetchone()))
+    character = dict(c.fetchone())
     
-    # Récupère tous les mods non équipés + ceux du personnage
     c.execute('''SELECT * FROM mods 
                  WHERE ally_code = ? AND (is_equipped = 0 OR character_id = ?)''',
               (ally_code, character_id))
     
-    available_mods = [dict(zip([d[0] for d in c.description], row)) for row in c.fetchall()]
+    available_mods = [dict(row) for row in c.fetchall()]
     conn.close()
     
-    # Groupe les mods par slot
     mods_by_slot = defaultdict(list)
     for mod in available_mods:
         mods_by_slot[mod['slot']].append(mod)
     
-    # Sélectionne le meilleur mod pour chaque slot
     best_config = []
-    for slot in range(1, 7):  # 6 slots de mods
+    for slot in range(1, 7):
         if slot in mods_by_slot and mods_by_slot[slot]:
-            # Trie par vitesse (ou autre stat prioritaire)
             sorted_mods = sorted(mods_by_slot[slot], 
                                key=lambda m: m.get('speed', 0), 
                                reverse=True)
             best_config.append(sorted_mods[0])
     
-    # Calcule les stats finales
     score, final_stats = calculate_character_score(character, best_config, stat_weights)
     
     return {
@@ -320,7 +367,7 @@ def optimize_mods_for_character(ally_code, character_id, stat_weights):
         'score': score
     }
 
-# ==================== ROUTES ====================
+# ==================== ROUTES PRINCIPALES ====================
 
 @app.route('/')
 def index():
@@ -347,50 +394,139 @@ def gac_page():
     """Page de comparaison GAC"""
     return render_template('gac.html')
 
-@app.route('/api/fetch_player', methods=['POST'])
-def fetch_player():
-    """Récupère et sauvegarde les données d'un joueur"""
+# ==================== API ENDPOINTS ====================
+
+@app.route('/api/load_player_data', methods=['POST'])
+def load_player_data():
+    """Charge les données d'un joueur depuis l'API et les sauvegarde"""
     ally_code = request.json.get('ally_code', '').replace('-', '')
     
-    if not ally_code:
-        return jsonify({'error': 'AllyCode requis'}), 400
+    if not ally_code or len(ally_code) != 9:
+        return jsonify({'error': 'Ally Code invalide (9 chiffres requis)'}), 400
     
-    # Fetch data
+    # Récupère les données
     data = fetch_player_data(ally_code)
     
-    if data:
-        # Sauvegarde dans la DB
-        if save_player_data(ally_code, data):
-            return jsonify({
-                'success': True,
-                'message': 'Données récupérées avec succès',
-                'data': {
-                    'name': data.get('data', {}).get('name'),
-                    'gp': data.get('data', {}).get('galactic_power'),
-                    'characters': len([u for u in data.get('data', {}).get('roster', []) 
-                                     if u.get('combat_type') == 1])
-                }
-            })
-        else:
-            return jsonify({'error': 'Erreur lors de la sauvegarde'}), 500
-    else:
+    if not data:
         return jsonify({'error': 'Impossible de récupérer les données'}), 500
+    
+    # Sauvegarde dans la DB
+    if save_player_data(ally_code, data):
+        # Récupère les stats pour le dashboard
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        # Info joueur
+        c.execute('SELECT * FROM player_info WHERE ally_code = ?', (ally_code,))
+        player = dict(c.fetchone())
+        
+        # Statistiques
+        c.execute('SELECT COUNT(*) as count FROM characters WHERE ally_code = ?', (ally_code,))
+        total_chars = c.fetchone()['count']
+        
+        c.execute('SELECT COUNT(*) as count FROM characters WHERE ally_code = ? AND relic_tier >= 5', 
+                  (ally_code,))
+        relics_r5 = c.fetchone()['count']
+        
+        c.execute('SELECT COUNT(*) as count FROM mods WHERE ally_code = ?', (ally_code,))
+        total_mods = c.fetchone()['count']
+        
+        # Top 10 personnages
+        c.execute('''SELECT name, galactic_power as gp FROM characters 
+                     WHERE ally_code = ? 
+                     ORDER BY galactic_power DESC LIMIT 10''', 
+                  (ally_code,))
+        top_chars = [dict(row) for row in c.fetchall()]
+        
+        conn.close()
+        
+        return jsonify({
+            'player': {
+                'name': player['name'],
+                'level': player['level'],
+                'guild_name': player['guild_name']
+            },
+            'stats': {
+                'total_gp': player['galactic_power'],
+                'total_characters': total_chars,
+                'relics_r5_plus': relics_r5,
+                'total_mods': total_mods
+            },
+            'top_characters': top_chars
+        })
+    else:
+        return jsonify({'error': 'Erreur lors de la sauvegarde'}), 500
+
+@app.route('/api/check_loaded_data')
+def check_loaded_data():
+    """Vérifie si des données sont déjà chargées"""
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    c.execute('SELECT * FROM player_info ORDER BY last_updated DESC LIMIT 1')
+    row = c.fetchone()
+    
+    if row:
+        player = dict(row)
+        ally_code = player['ally_code']
+        
+        # Récupère les stats
+        c.execute('SELECT COUNT(*) as count FROM characters WHERE ally_code = ?', (ally_code,))
+        total_chars = c.fetchone()['count']
+        
+        c.execute('SELECT COUNT(*) as count FROM characters WHERE ally_code = ? AND relic_tier >= 5', 
+                  (ally_code,))
+        relics_r5 = c.fetchone()['count']
+        
+        c.execute('SELECT COUNT(*) as count FROM mods WHERE ally_code = ?', (ally_code,))
+        total_mods = c.fetchone()['count']
+        
+        c.execute('''SELECT name, galactic_power as gp FROM characters 
+                     WHERE ally_code = ? 
+                     ORDER BY galactic_power DESC LIMIT 10''', 
+                  (ally_code,))
+        top_chars = [dict(row) for row in c.fetchall()]
+        
+        conn.close()
+        
+        return jsonify({
+            'has_data': True,
+            'player': {
+                'name': player['name'],
+                'level': player['level'],
+                'guild_name': player['guild_name']
+            },
+            'stats': {
+                'total_gp': player['galactic_power'],
+                'total_characters': total_chars,
+                'relics_r5_plus': relics_r5,
+                'total_mods': total_mods
+            },
+            'top_characters': top_chars
+        })
+    else:
+        conn.close()
+        return jsonify({'has_data': False})
+
+@app.route('/api/fetch_player', methods=['POST'])
+def fetch_player():
+    """Récupère et sauvegarde les données d'un joueur (legacy endpoint)"""
+    return load_player_data()
 
 @app.route('/api/player_info/<ally_code>')
 def get_player_info(ally_code):
     """Récupère les infos d'un joueur depuis la DB"""
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     c = conn.cursor()
     
     c.execute('SELECT * FROM player_info WHERE ally_code = ?', (ally_code,))
     row = c.fetchone()
     
     if row:
-        player = dict(zip([d[0] for d in c.description], row))
+        player = dict(row)
         
-        # Récupère le nombre de personnages
-        c.execute('SELECT COUNT(*) FROM characters WHERE ally_code = ?', (ally_code,))
-        char_count = c.fetchone()[0]
+        c.execute('SELECT COUNT(*) as count FROM characters WHERE ally_code = ?', (ally_code,))
+        char_count = c.fetchone()['count']
         
         conn.close()
         
@@ -406,7 +542,7 @@ def get_player_info(ally_code):
 @app.route('/api/characters/<ally_code>')
 def get_characters(ally_code):
     """Récupère tous les personnages d'un joueur"""
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     df = pd.read_sql_query(
         'SELECT * FROM characters WHERE ally_code = ? ORDER BY galactic_power DESC',
         conn, params=(ally_code,)
@@ -421,7 +557,7 @@ def get_characters(ally_code):
 @app.route('/api/mods/<ally_code>')
 def get_mods(ally_code):
     """Récupère tous les mods d'un joueur"""
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     
     equipped = request.args.get('equipped', 'all')
     
@@ -449,7 +585,6 @@ def optimize():
     ally_code = data.get('ally_code')
     character_id = data.get('character_id')
     
-    # Poids par défaut (personnalisables)
     stat_weights = data.get('stat_weights', {
         'speed': 1.0,
         'offense': 0.5,
@@ -470,14 +605,15 @@ def save_loadout():
     ally_code = data.get('ally_code')
     name = data.get('name')
     description = data.get('description', '')
+    event_type = data.get('event_type', 'General')
     loadout_data = json.dumps(data.get('data', {}))
     
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     c = conn.cursor()
     
-    c.execute('''INSERT INTO loadouts (ally_code, name, description, data, created_at)
-                 VALUES (?, ?, ?, ?, ?)''',
-              (ally_code, name, description, loadout_data, datetime.now()))
+    c.execute('''INSERT INTO loadouts (ally_code, name, description, event_type, data, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?)''',
+              (ally_code, name, description, event_type, loadout_data, datetime.now()))
     
     conn.commit()
     loadout_id = c.lastrowid
@@ -492,7 +628,7 @@ def save_loadout():
 @app.route('/api/loadouts/<ally_code>')
 def get_loadouts(ally_code):
     """Récupère tous les loadouts d'un joueur"""
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     c = conn.cursor()
     
     c.execute('SELECT * FROM loadouts WHERE ally_code = ? ORDER BY created_at DESC',
@@ -500,7 +636,7 @@ def get_loadouts(ally_code):
     
     loadouts = []
     for row in c.fetchall():
-        loadout = dict(zip([d[0] for d in c.description], row))
+        loadout = dict(row)
         loadout['data'] = json.loads(loadout['data'])
         loadouts.append(loadout)
     
@@ -511,14 +647,28 @@ def get_loadouts(ally_code):
         'loadouts': loadouts
     })
 
+@app.route('/api/loadout/delete/<int:loadout_id>', methods=['DELETE'])
+def delete_loadout(loadout_id):
+    """Supprime un loadout"""
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    c.execute('DELETE FROM loadouts WHERE id = ?', (loadout_id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Loadout supprimé'
+    })
+
 @app.route('/api/export/mods/<ally_code>')
 def export_mods(ally_code):
     """Export des mods en CSV"""
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     df = pd.read_sql_query('SELECT * FROM mods WHERE ally_code = ?', conn, params=(ally_code,))
     conn.close()
     
-    # Crée un CSV en mémoire
     output = io.StringIO()
     df.to_csv(output, index=False)
     output.seek(0)
@@ -537,15 +687,13 @@ def compare_players():
     ally_code_1 = data.get('ally_code_1')
     ally_code_2 = data.get('ally_code_2')
     
-    conn = sqlite3.connect('swgoh_data.db')
+    conn = get_db_connection()
     
-    # Récupère les infos des deux joueurs
     c = conn.cursor()
     c.execute('SELECT * FROM player_info WHERE ally_code IN (?, ?)', 
               (ally_code_1, ally_code_2))
-    players = [dict(zip([d[0] for d in c.description], row)) for row in c.fetchall()]
+    players = [dict(row) for row in c.fetchall()]
     
-    # Compare les rosters
     df1 = pd.read_sql_query('SELECT * FROM characters WHERE ally_code = ?',
                             conn, params=(ally_code_1,))
     df2 = pd.read_sql_query('SELECT * FROM characters WHERE ally_code = ?',
@@ -558,15 +706,15 @@ def compare_players():
         'stats': {
             'player1': {
                 'total_characters': len(df1),
-                'avg_gear': df1['gear_level'].mean(),
-                'avg_relic': df1['relic_tier'].mean(),
-                'top_gp': df1.nlargest(10, 'galactic_power')['galactic_power'].sum()
+                'avg_gear': float(df1['gear_level'].mean()) if len(df1) > 0 else 0,
+                'avg_relic': float(df1['relic_tier'].mean()) if len(df1) > 0 else 0,
+                'top_gp': int(df1.nlargest(10, 'galactic_power')['galactic_power'].sum()) if len(df1) >= 10 else 0
             },
             'player2': {
                 'total_characters': len(df2),
-                'avg_gear': df2['gear_level'].mean(),
-                'avg_relic': df2['relic_tier'].mean(),
-                'top_gp': df2.nlargest(10, 'galactic_power')['galactic_power'].sum()
+                'avg_gear': float(df2['gear_level'].mean()) if len(df2) > 0 else 0,
+                'avg_relic': float(df2['relic_tier'].mean()) if len(df2) > 0 else 0,
+                'top_gp': int(df2.nlargest(10, 'galactic_power')['galactic_power'].sum()) if len(df2) >= 10 else 0
             }
         }
     }
@@ -575,6 +723,18 @@ def compare_players():
         'success': True,
         'comparison': comparison
     })
+
+# ==================== ERROR HANDLERS ====================
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint non trouvé'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Erreur serveur interne'}), 500
+
+# ==================== MAIN ====================
 
 if __name__ == '__main__':
     print("Initialisation de la base de données...")
