@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+
+{% block title %}Loadouts - SWGOH Manager{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="card-header">💾 Gestion des Loadouts</h2>
+    
+    <div style="background: rgba(102, 126, 234, 0.1); padding: 1rem; border-radius: 8px; border-left: 4px solid #667eea; margin-bottom: 2rem;">
+        <strong>ℹ️ À propos des Loadouts:</strong> Sauvegardez vos configurations d'équipes et de mods pour différents événements (GAC, TW, TB, Raids). 
+        Vous pouvez créer plusieurs loadouts et basculer entre eux facilement.
+    </div>
+
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem;">
+        <button class="btn btn-success" onclick="openCreateLoadoutModal()">
+            ➕ Créer un Nouveau Loadout
+        </button>
+        <button class="btn" onclick="loadLoadouts()">
+            🔄 Actualiser la Liste
+        </button>
+        <button class="btn btn-warning" onclick="importLoadout()">
+            📥 Importer un Loadout
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-header">📋 Mes Loadouts</h2>
+    
+    <div id="loadoutsList">
+        <div style="text-align: center; padding: 2rem; color: #888;">
+            <div class="loading"></div>
+            <p style="margin-top: 1rem;">Chargement des loadouts...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Création de Loadout -->
+<div id="createLoadoutModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3 style="color: #ffd700;">➕ Créer un Loadout</h3>
+            <button class="modal-close" onclick="closeCreateLoadoutModal()">✕</button>
+        </div>
+        
+        <form onsubmit="saveLoadout(event)">
+            <div class="form-group">
+                <label>Nom du Loadout *</label>
+                <input type="text" id="loadoutName" class="form-control" 
+                       placeholder="Ex: GAC Défense Zone 1" required>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="loadoutDescription" class="form-control" rows="3" 
+                          placeholder="Description de ce loadout (événement, stratégie, etc.)"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Type d'Événement</label>
+                <select id="loadoutType" class="form-control">
+                    <option value="gac">Grand Arena Championship (GAC)</option>
+                    <option value="tw">Territory Wars (TW)</option>
+                    <option value="tb">Territory Battles (TB)</option>
+                    <option value="raid">Raids</option>
+                    <option value="conquest">Conquest</option>
+                    <option value="other">Autre</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Sélectionnez les Personnages</label>
+                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; max-height: 300px; overflow-y: auto;">
+                    <div id="charactersList">
+                        <!-- Rempli dynamiquement -->
+                    </div>
+                </div>
+                <small style="color: #888; display: block; margin-top: 0.5rem;">
+                    Sélectionnez jusqu'à 5 personnages pour créer une équipe
+                </small>
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                <button type="button" class="btn btn-danger" onclick="closeCreateLoadoutModal()">
+                    Annuler
+                </button>
+                <button type="submit" class="btn btn-success">
+                    💾 Sauvegarder le Loadout
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Détails du Loadout -->
+<div id="loadoutDetailsModal" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-header">
+            <h3 style="color: #ffd700;" id="loadoutDetailsTitle">Détails du Loadout</h3>
+            <button class="modal-close" onclick="closeLoadoutDetailsModal()">✕</button>
+        </div>
+        
+        <div id="loadoutDetailsContent">
+            <!-- Rempli dynamiquement -->
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <button class="btn btn-warning" onclick="exportCurrentLoadout()">
+                📤 Exporter
+            </button>
+            <button class="btn btn-danger" onclick="deleteCurrentLoadout()">
+                🗑️ Supprimer
+            </button>
+            <button class="btn" onclick="closeLoadoutDetailsModal()">
+                Fermer
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Import -->
+<div id="importLoadoutModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 style="color: #ffd700;">📥 Importer un Loadout</h3>
+            <button class="modal-close" onclick="closeImportLoadoutModal()">✕</button>
+        </div>
+        
+        <div class="form-group">
+            <label>Fichier JSON</label>
+            <input type="file" id="loadoutFile" class="form-control" accept=".json">
+        </div>
+
+        <div style="text-align: center; margin-top: 1rem; color: #888;">
+            <p>ou</p>
+        </div>
+
+        <div class="form-group">
+            <label>Coller le JSON directement</label>
+            <textarea id="loadoutJSON" class="form-control" rows="10" 
+                      placeholder='{"name": "Mon Loadout", ...}'></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+            <button class="btn btn-danger" onclick="closeImportLoadoutModal()">
+                Annuler
+            </button>
+            <button class="btn btn-success" onclick="processImport()">
+                📥 Importer
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allLoadouts = [];
+let selectedCharacters = [];
+let currentLoadout = null;
+
+window.addEventListener('DOMContentLoaded', () => {
+    const allyCode = getStoredAllyCode();
+    if (allyCode) {
+        loadLoadouts();
+        loadCharactersForSelection();
+    } else {
+        showAlert('Veuillez d\'abord charger votre roster depuis le Dashboard', 'info');
+        setTimeout(() => window.location.href = '/', 2000);
+    }
+});
+
+async function loadLoadouts() {
+    const allyCode = getStoredAllyCode();
+    if (!allyCode) return;
+
+    try {
+        const response = await fetch(`/api/loadouts/${allyCode}`);
+        const data = await response.json();
+
+        if (data.success) {
+            allLoadouts = data.loadouts;
+            displayLoadouts();
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors du chargement des loadouts', 'error');
+    }
+}
+
+function displayLoadouts() {
+    const container = document.getElementById('loadoutsList');
+    
+    if (allLoadouts.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: #888;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">📦</div>
+                <p style="font-size: 1.2rem;">Aucun loadout enregistré</p>
+                <p>Créez votre premier loadout pour commencer</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = '<div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));"></div>';
+    const grid = container.querySelector('.grid');
+
+    allLoadouts.forEach(loadout => {
+        const card = document.createElement('div');
+        card.className = 'stat-card';
+        card.style.cursor = 'pointer';
+        card.style.textAlign = 'left';
+        card.onclick = () => showLoadoutDetails(loadout);
+
+        const eventIcons = {
+            'gac': '⚔️',
+            'tw': '🏰',
+            'tb': '🌍',
+            'raid': '🎯',
+            'conquest': '🗺️',
+            'other': '📋'
+        };
+
+        const eventType = loadout.data.type || 'other';
+        const icon = eventIcons[eventType] || '📋';
+
+        const charactersCount = loadout.data.characters ? loadout.data.characters.length : 0;
+        const createdDate = new Date(loadout.created_at).toLocaleDateString('fr-FR');
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                <div style="font-size: 2rem;">${icon}</div>
+                <div style="font-size: 0.85rem; color: #888;">${createdDate}</div>
+            </div>
+            <h4 style="color: #ffd700; margin-bottom: 0.5rem; font-size: 1.2rem;">${loadout.name}</h4>
+            <p style="color: #b0b0b0; font-size: 0.9rem; margin-bottom: 1rem; line-height: 1.4;">
+                ${loadout.description || 'Pas de description'}
+            </p>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                <span style="color: #888; font-size: 0.85rem;">
+                    👥 ${charactersCount} personnage${charactersCount > 1 ? 's' : ''}
+                </span>
+                <span style="color: #667eea; font-size: 0.85rem;">
+                    Voir détails →
+                </span>
+            </div>
+        `;
+
+        grid.appendChild(card);
+    });
+}
+
+function openCreateLoadoutModal() {
+    document.getElementById('createLoadoutModal').classList.add('active');
+    selectedCharacters = [];
+    updateCharacterSelection();
+}
+
+function closeCreateLoadoutModal() {
+    document.getElementById('createLoadoutModal').classList.remove('active');
+    document.getElementById('loadoutName').value = '';
+    document.getElementById('loadoutDescription').value = '';
+    selectedCharacters = [];
+}
+
+async function loadCharactersForSelection() {
+    const allyCode = getStoredAllyCode();
+    if (!allyCode) return;
+
+    try {
+        const response = await fetch(`/api/characters/${allyCode}`);
+        const data = await response.json();
+
+        if (data.success) {
+            const container = document.getElementById('charactersList');
+            container.innerHTML = '';
+
+            data.characters.forEach(char => {
+                const charDiv = document.createElement('div');
+                charDiv.style.cssText = `
+                    padding: 0.75rem;
+                    margin-bottom: 0.5rem;
+                    background: rgba(255,255,255,0.03);
+                    border-radius: 6px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    border: 2px solid transparent;
+                `;
+
+                charDiv.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>${char.name}</strong>
+                            <div style="font-size: 0.85rem; color: #888;">
+                                G${char.gear_level} · R${char.relic_tier || 0} · GP: ${formatNumber(char.galactic_power)}
+                            </div>
+                        </div>
+                        <div class="char-checkbox" style="width: 24px; height: 24px; border: 2px solid #667eea; border-radius: 4px;"></div>
+                    </div>
+                `;
+
+                charDiv.onclick = () => toggleCharacterSelection(char, charDiv);
+                container.appendChild(charDiv);
+            });
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+    }
+}
+
+function toggleCharacterSelection(character, element) {
+    const index = selectedCharacters.findIndex(c => c.base_id === character.base_id);
+    
+    if (index > -1) {
+        selectedCharacters.splice(index, 1);
+        element.style.border = '2px solid transparent';
+        element.querySelector('.char-checkbox').innerHTML = '';
+    } else {
+        if (selectedCharacters.length >= 5) {
+            showAlert('Maximum 5 personnages par loadout', 'error');
+            return;
+        }
+        selectedCharacters.push(character);
+        element.style.border = '2px solid #38ef7d';
+        element.querySelector('.char-checkbox').innerHTML = '✓';
+        element.querySelector('.char-checkbox').style.backgroundColor = '#38ef7d';
+        element.querySelector('.char-checkbox').style.color = '#1a1a2e';
+        element.querySelector('.char-checkbox').style.display = 'flex';
+        element.querySelector('.char-checkbox').style.alignItems = 'center';
+        element.querySelector('.char-checkbox').style.justifyContent = 'center';
+    }
+}
+
+function updateCharacterSelection() {
+    // Mise à jour visuelle si nécessaire
+}
+
+async function saveLoadout(event) {
+    event.preventDefault();
+
+    const name = document.getElementById('loadoutName').value;
+    const description = document.getElementById('loadoutDescription').value;
+    const type = document.getElementById('loadoutType').value;
+
+    if (selectedCharacters.length === 0) {
+        showAlert('Veuillez sélectionner au moins un personnage', 'error');
+        return;
+    }
+
+    const allyCode = getStoredAllyCode();
+    const btn = event.submitter;
+    const hideLoading = showLoading(btn);
+
+    try {
+        const response = await fetch('/api/loadout/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                ally_code: allyCode,
+                name: name,
+                description: description,
+                data: {
+                    type: type,
+                    characters: selectedCharacters
+                }
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showAlert('Loadout sauvegardé avec succès!', 'success');
+            closeCreateLoadoutModal();
+            await loadLoadouts();
+        } else {
+            showAlert('Erreur lors de la sauvegarde', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors de la sauvegarde', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function showLoadoutDetails(loadout) {
+    currentLoadout = loadout;
+    
+    document.getElementById('loadoutDetailsTitle').textContent = loadout.name;
+    
+    const eventIcons = {
+        'gac': '⚔️ Grand Arena Championship',
+        'tw': '🏰 Territory Wars',
+        'tb': '🌍 Territory Battles',
+        'raid': '🎯 Raids',
+        'conquest': '🗺️ Conquest',
+        'other': '📋 Autre'
+    };
+
+    const eventType = loadout.data.type || 'other';
+    const eventLabel = eventIcons[eventType] || '📋 Autre';
+
+    let content = `
+        <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;">
+            <div style="display: grid; gap: 1rem;">
+                <div>
+                    <strong style="color: #ffd700;">Type d'Événement:</strong><br>
+                    <span style="color: #e4e4e4;">${eventLabel}</span>
+                </div>
+                <div>
+                    <strong style="color: #ffd700;">Description:</strong><br>
+                    <span style="color: #e4e4e4;">${loadout.description || 'Aucune description'}</span>
+                </div>
+                <div>
+                    <strong style="color: #ffd700;">Créé le:</strong><br>
+                    <span style="color: #e4e4e4;">${new Date(loadout.created_at).toLocaleString('fr-FR')}</span>
+                </div>
+            </div>
+        </div>
+
+        <h4 style="color: #ffd700; margin-bottom: 1rem;">👥 Personnages de l'Équipe</h4>
+    `;
+
+    if (loadout.data.characters && loadout.data.characters.length > 0) {
+        content += '<div style="display: grid; gap: 1rem;">';
+        
+        loadout.data.characters.forEach((char, index) => {
+            content += `
+                <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size: 1.1rem;">${index + 1}. ${char.name}</strong>
+                            <div style="margin-top: 0.5rem; color: #888; font-size: 0.9rem;">
+                                Niveau ${char.level} · Gear ${char.gear_level} · Relique ${char.relic_tier || 0}
+                            </div>
+                            <div style="margin-top: 0.25rem; color: #ffd700; font-size: 0.85rem;">
+                                GP: ${formatNumber(char.galactic_power)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        content += '</div>';
+    } else {
+        content += '<p style="color: #888; text-align: center; padding: 2rem;">Aucun personnage dans ce loadout</p>';
+    }
+
+    document.getElementById('loadoutDetailsContent').innerHTML = content;
+    document.getElementById('loadoutDetailsModal').classList.add('active');
+}
+
+function closeLoadoutDetailsModal() {
+    document.getElementById('loadoutDetailsModal').classList.remove('active');
+    currentLoadout = null;
+}
+
+function exportCurrentLoadout() {
+    if (!currentLoadout) return;
+
+    const dataStr = JSON.stringify(currentLoadout, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `loadout_${currentLoadout.name.replace(/\s+/g, '_')}_${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    showAlert('Loadout exporté', 'success');
+}
+
+function deleteCurrentLoadout() {
+    if (!currentLoadout) return;
+
+    if (confirm(`Êtes-vous sûr de vouloir supprimer le loadout "${currentLoadout.name}" ?`)) {
+        // TODO: Implémenter la suppression côté serveur
+        showAlert('Fonction de suppression à implémenter', 'info');
+    }
+}
+
+function importLoadout() {
+    document.getElementById('importLoadoutModal').classList.add('active');
+}
+
+function closeImportLoadoutModal() {
+    document.getElementById('importLoadoutModal').classList.remove('active');
+    document.getElementById('loadoutFile').value = '';
+    document.getElementById('loadoutJSON').value = '';
+}
+
+function processImport() {
+    const fileInput = document.getElementById('loadoutFile');
+    const jsonInput = document.getElementById('loadoutJSON').value;
+
+    if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            try {
+                const loadout = JSON.parse(e.target.result);
+                importLoadoutData(loadout);
+            } catch (error) {
+                showAlert('Fichier JSON invalide', 'error');
+            }
+        };
+        
+        reader.readAsText(file);
+    } else if (jsonInput) {
+        try {
+            const loadout = JSON.parse(jsonInput);
+            importLoadoutData(loadout);
+        } catch (error) {
+            showAlert('JSON invalide', 'error');
+        }
+    } else {
+        showAlert('Veuillez sélectionner un fichier ou coller du JSON', 'error');
+    }
+}
+
+function importLoadoutData(loadout) {
+    // TODO: Sauvegarder le loadout importé
+    showAlert('Import réussi! Fonction de sauvegarde à implémenter', 'success');
+    closeImportLoadoutModal();
+}
+
+function formatNumber(num) {
+    if (!num) return '0';
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+// Fermer les modals en cliquant à l'extérieur
+['createLoadoutModal', 'loadoutDetailsModal', 'importLoadoutModal'].forEach(modalId => {
+    document.getElementById(modalId).addEventListener('click', (e) => {
+        if (e.target.id === modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+
+{% block title %}Comparaison GAC - SWGOH Manager{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="card-header">⚔️ Comparaison GAC (Grand Arena Championship)</h2>
+    
+    <div style="background: rgba(255, 215, 0, 0.1); padding: 1rem; border-radius: 8px; border-left: 4px solid #ffd700; margin-bottom: 2rem;">
+        <strong>💡 Astuce:</strong> Comparez votre roster avec celui de votre adversaire pour identifier les forces et faiblesses, 
+        et élaborer une stratégie gagnante.
+    </div>
+
+    <div class="grid" style="margin-bottom: 2rem;">
+        <div style="background: rgba(102, 126, 234, 0.1); padding: 1.5rem; border-radius: 10px;">
+            <h3 style="color: #667eea; margin-bottom: 1rem;">👤 Votre Roster</h3>
+            <div class="form-group">
+                <label>Votre Ally Code</label>
+                <input type="text" id="allyCode1" class="form-control" placeholder="123-456-789" readonly>
+            </div>
+            <div id="player1Info" style="margin-top: 1rem; display: none;">
+                <div style="padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                    <p><strong>Nom:</strong> <span id="player1Name">-</span></p>
+                    <p><strong>GP Total:</strong> <span id="player1GP">-</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div style="background: rgba(235, 51, 73, 0.1); padding: 1.5rem; border-radius: 10px;">
+            <h3 style="color: #eb3349; margin-bottom: 1rem;">🎯 Adversaire</h3>
+            <div class="form-group">
+                <label>Ally Code de l'Adversaire</label>
+                <input type="text" id="allyCode2" class="form-control" placeholder="987-654-321">
+            </div>
+            <button class="btn btn-success" onclick="loadOpponent()" style="width: 100%;">
+                📥 Charger l'Adversaire
+            </button>
+            <div id="player2Info" style="margin-top: 1rem; display: none;">
+                <div style="padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                    <p><strong>Nom:</strong> <span id="player2Name">-</span></p>
+                    <p><strong>GP Total:</strong> <span id="player2GP">-</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align: center;">
+        <button class="btn btn-warning" onclick="compareRosters()" style="font-size: 1.1rem; padding: 1rem 2rem;">
+            ⚡ Lancer la Comparaison
+        </button>
+    </div>
+</div>
+
+<div id="comparisonResults" style="display: none;">
+    <div class="card">
+        <h2 class="card-header">📊 Résultats de la Comparaison</h2>
+        
+        <div class="grid" style="margin-bottom: 2rem;">
+            <div class="stat-card" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));">
+                <div class="stat-label">Votre GP Total</div>
+                <div class="stat-value" id="compGP1">0</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, rgba(235, 51, 73, 0.2), rgba(244, 92, 67, 0.2));">
+                <div class="stat-label">GP Adversaire</div>
+                <div class="stat-value" id="compGP2">0</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, rgba(17, 153, 142, 0.2), rgba(56, 239, 125, 0.2));">
+                <div class="stat-label">Différence GP</div>
+                <div class="stat-value" id="compGPDiff">0</div>
+            </div>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
+            <h3 style="color: #ffd700; margin-bottom: 1rem;">📈 Statistiques Détaillées</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Métrique</th>
+                            <th style="text-align: center;">Vous</th>
+                            <th style="text-align: center;">Adversaire</th>
+                            <th style="text-align: center;">Avantage</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statsComparison">
+                        <!-- Rempli dynamiquement -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 10px;">
+                <h3 style="color: #38ef7d; margin-bottom: 1rem;">✅ Vos Forces</h3>
+                <ul id="player1Strengths" style="list-style: none; padding: 0;">
+                    <!-- Rempli dynamiquement -->
+                </ul>
+            </div>
+
+            <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 10px;">
+                <h3 style="color: #f45c43; margin-bottom: 1rem;">⚠️ Points d'Attention</h3>
+                <ul id="player1Weaknesses" style="list-style: none; padding: 0;">
+                    <!-- Rempli dynamiquement -->
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-header">🎯 Recommandations Stratégiques</h2>
+        <div id="strategicRecommendations">
+            <!-- Rempli dynamiquement -->
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-header">👥 Comparaison des Top 20 Personnages</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <div>
+                <h3 style="color: #667eea; margin-bottom: 1rem;">Votre Top 20</h3>
+                <div class="table-container">
+                    <table id="player1TopChars">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Personnage</th>
+                                <th>GP</th>
+                                <th>G/R</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rempli dynamiquement -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div>
+                <h3 style="color: #eb3349; margin-bottom: 1rem;">Top 20 Adversaire</h3>
+                <div class="table-container">
+                    <table id="player2TopChars">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Personnage</th>
+                                <th>GP</th>
+                                <th>G/R</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rempli dynamiquement -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-header">📤 Actions</h2>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <button class="btn btn-warning" onclick="exportComparison()">
+                💾 Exporter la Comparaison
+            </button>
+            <button class="btn" onclick="printComparison()">
+                🖨️ Imprimer
+            </button>
+            <button class="btn" onclick="shareComparison()">
+                🔗 Partager
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let player1Data = null;
+let player2Data = null;
+let comparisonData = null;
+
+window.addEventListener('DOMContentLoaded', () => {
+    const allyCode = getStoredAllyCode();
+    if (allyCode) {
+        document.getElementById('allyCode1').value = formatAllyCode(allyCode);
+        loadPlayer1Data();
+    } else {
+        showAlert('Veuillez d\'abord charger votre roster depuis le Dashboard', 'info');
+        setTimeout(() => window.location.href = '/', 2000);
+    }
+});
+
+function formatAllyCode(code) {
+    const clean = code.replace(/-/g, '');
+    return clean.match(/.{1,3}/g)?.join('-') || clean;
+}
+
+async function loadPlayer1Data() {
+    const allyCode = getStoredAllyCode();
+    if (!allyCode) return;
+
+    try {
+        const response = await fetch(`/api/player_info/${allyCode}`);
+        const data = await response.json();
+
+        if (data.success) {
+            player1Data = data;
+            document.getElementById('player1Info').style.display = 'block';
+            document.getElementById('player1Name').textContent = data.player.name;
+            document.getElementById('player1GP').textContent = formatNumber(data.player.galactic_power);
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+    }
+}
+
+async function loadOpponent() {
+    const allyCodeInput = document.getElementById('allyCode2').value;
+    const allyCode = allyCodeInput.replace(/-/g, '');
+
+    if (!allyCode || allyCode.length < 9) {
+        showAlert('Veuillez entrer un Ally Code valide', 'error');
+        return;
+    }
+
+    const btn = event.target;
+    const hideLoading = showLoading(btn);
+
+    try {
+        // Tente de charger depuis la DB locale d'abord
+        let response = await fetch(`/api/player_info/${allyCode}`);
+        let data = await response.json();
+
+        // Si pas en DB, fetch depuis l'API
+        if (!data.success) {
+            response = await fetch('/api/fetch_player', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ally_code: allyCode })
+            });
+            data = await response.json();
+
+            if (data.success) {
+                // Recharge les données sauvegardées
+                response = await fetch(`/api/player_info/${allyCode}`);
+                data = await response.json();
+            }
+        }
+
+        if (data.success) {
+            player2Data = data;
+            document.getElementById('player2Info').style.display = 'block';
+            document.getElementById('player2Name').textContent = data.player.name;
+            document.getElementById('player2GP').textContent = formatNumber(data.player.galactic_power);
+            showAlert('Adversaire chargé avec succès!', 'success');
+        } else {
+            showAlert('Impossible de charger l\'adversaire', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors du chargement de l\'adversaire', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function compareRosters() {
+    if (!player1Data || !player2Data) {
+        showAlert('Veuillez charger les deux joueurs avant de comparer', 'error');
+        return;
+    }
+
+    const allyCode1 = getStoredAllyCode();
+    const allyCode2 = document.getElementById('allyCode2').value.replace(/-/g, '');
+
+    const btn = event.target;
+    const hideLoading = showLoading(btn);
+
+    try {
+        const response = await fetch('/api/compare', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                ally_code_1: allyCode1,
+                ally_code_2: allyCode2
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            comparisonData = data.comparison;
+            displayComparison();
+            showAlert('Comparaison terminée!', 'success');
+        } else {
+            showAlert('Erreur lors de la comparaison', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors de la comparaison', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function displayComparison() {
+    if (!comparisonData) return;
+
+    document.getElementById('comparisonResults').style.display = 'block';
+
+    const stats1 = comparisonData.stats.player1;
+    const stats2 = comparisonData.stats.player2;
+
+    // Affiche les GP
+    document.getElementById('compGP1').textContent = formatNumber(player1Data.player.galactic_power);
+    document.getElementById('compGP2').textContent = formatNumber(player2Data.player.galactic_power);
+    
+    const gpDiff = player1Data.player.galactic_power - player2Data.player.galactic_power;
+    const diffElement = document.getElementById('compGPDiff');
+    diffElement.textContent = (gpDiff >= 0 ? '+' : '') + formatNumber(gpDiff);
+    diffElement.style.color = gpDiff >= 0 ? '#38ef7d' : '#f45c43';
+
+    // Tableau de comparaison des stats
+    const statsTable = document.getElementById('statsComparison');
+    statsTable.innerHTML = '';
+
+    const metrics = [
+        { label: 'Nombre de Personnages', key: 'total_characters' },
+        { label: 'Gear Moyen', key: 'avg_gear', format: (v) => 'G' + v.toFixed(1) },
+        { label: 'Relique Moyenne', key: 'avg_relic', format: (v) => 'R' + v.toFixed(1) },
+        { label: 'Top 10 GP', key: 'top_gp', format: formatNumber }
+    ];
+
+    metrics.forEach(metric => {
+        const row = statsTable.insertRow();
+        const val1 = stats1[metric.key];
+        const val2 = stats2[metric.key];
+        const advantage = val1 > val2 ? 'Vous' : val1 < val2 ? 'Adversaire' : 'Égal';
+        const advantageColor = val1 > val2 ? '#38ef7d' : val1 < val2 ? '#f45c43' : '#888';
+
+        row.innerHTML = `
+            <td>${metric.label}</td>
+            <td style="text-align: center; color: ${val1 > val2 ? '#38ef7d' : '#e4e4e4'}">
+                ${metric.format ? metric.format(val1) : val1}
+            </td>
+            <td style="text-align: center; color: ${val2 > val1 ? '#38ef7d' : '#e4e4e4'}">
+                ${metric.format ? metric.format(val2) : val2}
+            </td>
+            <td style="text-align: center; color: ${advantageColor}; font-weight: bold;">
+                ${advantage}
+            </td>
+        `;
+    });
+
+    // Analyse des forces et faiblesses
+    analyzeStrengthsWeaknesses(stats1, stats2);
+
+    // Recommandations stratégiques
+    generateRecommendations(stats1, stats2);
+
+    // Top personnages
+    loadTopCharacters(allyCode1, 'player1TopChars');
+    loadTopCharacters(allyCode2, 'player2TopChars');
+
+    // Scroll vers les résultats
+    document.getElementById('comparisonResults').scrollIntoView({ behavior: 'smooth' });
+}
+
+function analyzeStrengthsWeaknesses(stats1, stats2) {
+    const strengths = [];
+    const weaknesses = [];
+
+    if (stats1.total_characters > stats2.total_characters) {
+        strengths.push('Roster plus large - plus d\'options stratégiques');
+    } else if (stats1.total_characters < stats2.total_characters) {
+        weaknesses.push('Roster plus petit que l\'adversaire');
+    }
+
+    if (stats1.avg_gear > stats2.avg_gear) {
+        strengths.push('Gear moyen supérieur - personnages plus forts');
+    } else if (stats1.avg_gear < stats2.avg_gear) {
+        weaknesses.push('Gear moyen inférieur - besoin d\'upgrades');
+    }
+
+    if (stats1.avg_relic > stats2.avg_relic) {
+        strengths.push('Reliques moyennes supérieures - avantage significatif');
+    } else if (stats1.avg_relic < stats2.avg_relic) {
+        weaknesses.push('Reliques moyennes inférieures - adversaire plus développé');
+    }
+
+    if (stats1.top_gp > stats2.top_gp) {
+        strengths.push('Top 10 personnages plus puissants - domination potentielle');
+    } else if (stats1.top_gp < stats2.top_gp) {
+        weaknesses.push('Top personnages moins puissants - match difficile');
+    }
+
+    const strengthsList = document.getElementById('player1Strengths');
+    strengthsList.innerHTML = '';
+    if (strengths.length === 0) {
+        strengthsList.innerHTML = '<li style="color: #888; padding: 0.5rem 0;">Aucun avantage majeur détecté</li>';
+    } else {
+        strengths.forEach(strength => {
+            const li = document.createElement('li');
+            li.style.cssText = 'padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(56, 239, 125, 0.1); border-radius: 6px; border-left: 3px solid #38ef7d;';
+            li.innerHTML = `✓ ${strength}`;
+            strengthsList.appendChild(li);
+        });
+    }
+
+    const weaknessesList = document.getElementById('player1Weaknesses');
+    weaknessesList.innerHTML = '';
+    if (weaknesses.length === 0) {
+        weaknessesList.innerHTML = '<li style="color: #888; padding: 0.5rem 0;">Aucune faiblesse majeure détectée</li>';
+    } else {
+        weaknesses.forEach(weakness => {
+            const li = document.createElement('li');
+            li.style.cssText = 'padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(244, 92, 67, 0.1); border-radius: 6px; border-left: 3px solid #f45c43;';
+            li.innerHTML = `⚠️ ${weakness}`;
+            weaknessesList.appendChild(li);
+        });
+    }
+}
+
+function generateRecommendations(stats1, stats2) {
+    const recommendations = [];
+
+    // Stratégies basées sur la comparaison
+    if (stats1.total_characters > stats2.total_characters) {
+        recommendations.push({
+            title: 'Exploitez votre largeur de roster',
+            description: 'Utilisez des équipes de second plan en défense pour forcer l\'adversaire à dépenser ses meilleures équipes.',
+            priority: 'high'
+        });
+    }
+
+    if (stats1.avg_relic > stats2.avg_relic) {
+        recommendations.push({
+            title: 'Pression offensive',
+            description: 'Vos personnages reliques peuvent percer les défenses. Concentrez-vous sur une stratégie offensive agressive.',
+            priority: 'high'
+        });
+    } else if (stats1.avg_relic < stats2.avg_relic) {
+        recommendations.push({
+            title: 'Défense stratégique',
+            description: 'Placez vos meilleures équipes en défense et visez des cibles précises en attaque.',
+            priority: 'high'
+        });
+    }
+
+    if (stats1.top_gp > stats2.top_gp) {
+        recommendations.push({
+            title: 'Domination par le sommet',
+            description: 'Vos meilleurs personnages sont supérieurs. Utilisez-les pour éliminer les zones clés.',
+            priority: 'medium'
+        });
+    }
+
+    // Toujours recommander l\'optimisation des mods
+    recommendations.push({
+        title: 'Optimisez vos mods',
+        description: 'Utilisez l\'optimiseur de mods pour maximiser les stats de vos personnages clés avant le GAC.',
+        priority: 'medium'
+    });
+
+    recommendations.push({
+        title: 'Analysez les counters',
+        description: 'Identifiez les équipes de l\'adversaire et préparez des counter-teams appropriées.',
+        priority: 'low'
+    });
+
+    const container = document.getElementById('strategicRecommendations');
+    container.innerHTML = '';
+
+    const priorityColors = {
+        high: { bg: 'rgba(56, 239, 125, 0.1)', border: '#38ef7d', label: '🔥 Priorité Haute' },
+        medium: { bg: 'rgba(255, 215, 0, 0.1)', border: '#ffd700', label: '⚡ Priorité Moyenne' },
+        low: { bg: 'rgba(102, 126, 234, 0.1)', border: '#667eea', label: '💡 Conseil' }
+    };
+
+    recommendations.forEach(rec => {
+        const colors = priorityColors[rec.priority];
+        const div = document.createElement('div');
+        div.style.cssText = `
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            background: ${colors.bg};
+            border-radius: 10px;
+            border-left: 4px solid ${colors.border};
+        `;
+        div.innerHTML = `
+            <div style="color: ${colors.border}; font-size: 0.85rem; margin-bottom: 0.5rem; font-weight: bold;">
+                ${colors.label}
+            </div>
+            <h4 style="color: #ffd700; margin-bottom: 0.5rem;">${rec.title}</h4>
+            <p style="color: #e4e4e4; line-height: 1.6;">${rec.description}</p>
+        `;
+        container.appendChild(div);
+    });
+}
+
+async function loadTopCharacters(allyCode, tableId) {
+    try {
+        const response = await fetch(`/api/characters/${allyCode}`);
+        const data = await response.json();
+
+        if (data.success) {
+            const tbody = document.querySelector(`#${tableId} tbody`);
+            tbody.innerHTML = '';
+
+            data.characters.slice(0, 20).forEach((char, index) => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${char.name}</td>
+                    <td>${formatNumber(char.galactic_power)}</td>
+                    <td>G${char.gear_level}/R${char.relic_tier || 0}</td>
+                `;
+            });
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+    }
+}
+
+function formatNumber(num) {
+    if (!num) return '0';
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+function exportComparison() {
+    if (!comparisonData) {
+        showAlert('Aucune comparaison à exporter', 'error');
+        return;
+    }
+
+    const exportData = {
+        date: new Date().toISOString(),
+        player1: player1Data.player,
+        player2: player2Data.player,
+        comparison: comparisonData
+    };
+
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `gac_comparison_${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    showAlert('Comparaison exportée', 'success');
+}
+
+function printComparison() {
+    window.print();
+}
+
+function shareComparison() {
+    const url = window.location.href;
+    
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+            showAlert('Lien copié dans le presse-papiers', 'success');
+        });
+    } else {
+        showAlert('Fonction de partage non supportée par ce navigateur', 'info');
+    }
+}
+</script>
+{% endblock %}

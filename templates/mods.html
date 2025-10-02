@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Mods - SWGOH Manager{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="card-header">📦 Gestionnaire de Mods</h2>
+    
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem;">
+        <button class="btn btn-success" onclick="loadMods('all')">
+            📋 Tous les Mods
+        </button>
+        <button class="btn" onclick="loadMods('yes')">
+            ✅ Équipés
+        </button>
+        <button class="btn" onclick="loadMods('no')">
+            📦 Non Équipés
+        </button>
+        <button class="btn btn-warning" onclick="exportMods()">
+            💾 Exporter CSV
+        </button>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 2rem;">
+        <div class="stat-card">
+            <div class="stat-label">Total Mods</div>
+            <div class="stat-value" id="totalMods">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Équipés</div>
+            <div class="stat-value" id="equippedMods">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Non Équipés</div>
+            <div class="stat-value" id="unequippedMods">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Mods Vitesse +15</div>
+            <div class="stat-value" id="speedMods">0</div>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+        <h3 style="color: #ffd700; margin-bottom: 1rem;">🔍 Filtres</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Vitesse Minimum</label>
+                <input type="number" id="filterSpeed" class="form-control" value="0" min="0">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Slot</label>
+                <select id="filterSlot" class="form-control">
+                    <option value="">Tous</option>
+                    <option value="1">Square (1)</option>
+                    <option value="2">Arrow (2)</option>
+                    <option value="3">Diamond (3)</option>
+                    <option value="4">Triangle (4)</option>
+                    <option value="5">Circle (5)</option>
+                    <option value="6">Cross (6)</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Rareté</label>
+                <select id="filterRarity" class="form-control">
+                    <option value="">Toutes</option>
+                    <option value="5">5★ (Dorée)</option>
+                    <option value="6">6★ (6-Dot)</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: flex-end;">
+                <button class="btn" onclick="applyFilters()" style="width: 100%;">
+                    Appliquer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-header">📊 Liste des Mods</h2>
+    <div style="margin-bottom: 1rem; color: #888;">
+        <span id="modsCount">0 mods affichés</span>
+    </div>
+    <div class="table-container">
+        <table id="modsTable">
+            <thead>
+                <tr>
+                    <th>Slot</th>
+                    <th>Set</th>
+                    <th>Niveau</th>
+                    <th>Rareté</th>
+                    <th>Stat Primaire</th>
+                    <th>Vitesse</th>
+                    <th>Offense</th>
+                    <th>Protection</th>
+                    <th>Personnage</th>
+                    <th>Statut</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rempli dynamiquement -->
+            </tbody>
+        </table>
+    </div>
+    
+    <div id="pagination" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
+        <!-- Pagination dynamique -->
+    </div>
+</div>
+
+<!-- Modal pour détails d'un mod -->
+<div id="modModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 style="color: #ffd700;">Détails du Mod</h3>
+            <button class="modal-close" onclick="closeModModal()">✕</button>
+        </div>
+        <div id="modDetails">
+            <!-- Rempli dynamiquement -->
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allMods = [];
+let filteredMods = [];
+let currentPage = 1;
+const modsPerPage = 50;
+
+window.addEventListener('DOMContentLoaded', () => {
+    const allyCode = getStoredAllyCode();
+    if (allyCode) {
+        loadMods('all');
+    } else {
+        showAlert('Veuillez d\'abord charger votre roster depuis le Dashboard', 'info');
+        setTimeout(() => window.location.href = '/', 2000);
+    }
+});
+
+async function loadMods(equipped = 'all') {
+    const allyCode = getStoredAllyCode();
+    if (!allyCode) return;
+
+    try {
+        const response = await fetch(`/api/mods/${allyCode}?equipped=${equipped}`);
+        const data = await response.json();
+
+        if (data.success) {
+            allMods = data.mods;
+            filteredMods = [...allMods];
+            
+            updateStats(data);
+            displayMods();
+            showAlert(`${data.total} mods chargés`, 'success');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors du chargement des mods', 'error');
+    }
+}
+
+function updateStats(data) {
+    document.getElementById('totalMods').textContent = data.total;
+    document.getElementById('equippedMods').textContent = data.total - data.unequipped;
+    document.getElementById('unequippedMods').textContent = data.unequipped;
+    
+    const speedMods = allMods.filter(m => m.speed >= 15).length;
+    document.getElementById('speedMods').textContent = speedMods;
+}
+
+function applyFilters() {
+    const minSpeed = parseFloat(document.getElementById('filterSpeed').value) || 0;
+    const slot = document.getElementById('filterSlot').value;
+    const rarity = document.getElementById('filterRarity').value;
+
+    filteredMods = allMods.filter(mod => {
+        if (minSpeed > 0 && (mod.speed || 0) < minSpeed) return false;
+        if (slot && mod.slot != slot) return false;
+        if (rarity && mod.rarity != rarity) return false;
+        return true;
+    });
+
+    currentPage = 1;
+    displayMods();
+    showAlert(`${filteredMods.length} mods correspondent aux filtres`, 'info');
+}
+
+function displayMods() {
+    const tbody = document.querySelector('#modsTable tbody');
+    tbody.innerHTML = '';
+
+    const start = (currentPage - 1) * modsPerPage;
+    const end = start + modsPerPage;
+    const modsToDisplay = filteredMods.slice(start, end);
+
+    document.getElementById('modsCount').textContent = 
+        `${filteredMods.length} mods affichés (page ${currentPage}/${Math.ceil(filteredMods.length / modsPerPage)})`;
+
+    modsToDisplay.forEach(mod => {
+        const row = tbody.insertRow();
+        row.style.cursor = 'pointer';
+        row.onclick = () => showModDetails(mod);
+        
+        row.innerHTML = `
+            <td>${getSlotName(mod.slot)}</td>
+            <td>${getSetName(mod.set_type)}</td>
+            <td>${mod.level}</td>
+            <td>${'⭐'.repeat(mod.rarity || 5)}</td>
+            <td>${mod.primary_stat_type}</td>
+            <td style="color: ${mod.speed >= 20 ? '#38ef7d' : mod.speed >= 15 ? '#ffd700' : '#e4e4e4'}">
+                ${mod.speed ? '+' + mod.speed : '-'}
+            </td>
+            <td>${mod.offense ? '+' + Math.round(mod.offense) : '-'}</td>
+            <td>${mod.protection ? '+' + Math.round(mod.protection) : '-'}</td>
+            <td>${mod.character_id || '<span style="color: #888;">Non équipé</span>'}</td>
+            <td>
+                <span style="color: ${mod.is_equipped ? '#38ef7d' : '#f2994a'}">
+                    ${mod.is_equipped ? '✓ Équipé' : '○ Libre'}
+                </span>
+            </td>
+        `;
+    });
+
+    updatePagination();
+}
+
+function getSlotName(slot) {
+    const slots = {
+        1: '🟦 Square',
+        2: '🔺 Arrow',
+        3: '💎 Diamond',
+        4: '🔺 Triangle',
+        5: '🔵 Circle',
+        6: '✖️ Cross'
+    };
+    return slots[slot] || slot;
+}
+
+function getSetName(setType) {
+    const sets = {
+        1: 'Health',
+        2: 'Offense',
+        3: 'Defense',
+        4: 'Speed',
+        5: 'Crit Chance',
+        6: 'Crit Damage',
+        7: 'Potency',
+        8: 'Tenacity'
+    };
+    return sets[setType] || 'Unknown';
+}
+
+function updatePagination() {
+    const totalPages = Math.ceil(filteredMods.length / modsPerPage);
+    const pagination = document.getElementById('pagination');
+    pagination.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    // Bouton précédent
+    if (currentPage > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'btn';
+        prevBtn.textContent = '← Précédent';
+        prevBtn.onclick = () => {
+            currentPage--;
+            displayMods();
+        };
+        pagination.appendChild(prevBtn);
+    }
+
+    // Numéros de page
+    const pageInfo = document.createElement('span');
+    pageInfo.style.display = 'flex';
+    pageInfo.style.alignItems = 'center';
+    pageInfo.style.color = '#ffd700';
+    pageInfo.textContent = `Page ${currentPage} / ${totalPages}`;
+    pagination.appendChild(pageInfo);
+
+    // Bouton suivant
+    if (currentPage < totalPages) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'btn';
+        nextBtn.textContent = 'Suivant →';
+        nextBtn.onclick = () => {
+            currentPage++;
+            displayMods();
+        };
+        pagination.appendChild(nextBtn);
+    }
+}
+
+function showModDetails(mod) {
+    const modal = document.getElementById('modModal');
+    const details = document.getElementById('modDetails');
+    
+    details.innerHTML = `
+        <div style="display: grid; gap: 1rem;">
+            <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px;">
+                <h4 style="color: #ffd700; margin-bottom: 0.5rem;">Informations Générales</h4>
+                <p><strong>Slot:</strong> ${getSlotName(mod.slot)}</p>
+                <p><strong>Set:</strong> ${getSetName(mod.set_type)}</p>
+                <p><strong>Niveau:</strong> ${mod.level}</p>
+                <p><strong>Rareté:</strong> ${'⭐'.repeat(mod.rarity || 5)}</p>
+                <p><strong>Tier:</strong> ${mod.tier}</p>
+            </div>
+            
+            <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px;">
+                <h4 style="color: #ffd700; margin-bottom: 0.5rem;">Stats</h4>
+                <p><strong>Stat Primaire:</strong> ${mod.primary_stat_type} (+${mod.primary_stat_value})</p>
+                ${mod.speed ? `<p style="color: #38ef7d;"><strong>Vitesse:</strong> +${mod.speed}</p>` : ''}
+                ${mod.offense ? `<p><strong>Offense:</strong> +${Math.round(mod.offense)}</p>` : ''}
+                ${mod.protection ? `<p><strong>Protection:</strong> +${Math.round(mod.protection)}</p>` : ''}
+                ${mod.health ? `<p><strong>Santé:</strong> +${Math.round(mod.health)}</p>` : ''}
+            </div>
+            
+            <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px;">
+                <h4 style="color: #ffd700; margin-bottom: 0.5rem;">Statut</h4>
+                <p><strong>Équipé sur:</strong> ${mod.character_id || 'Non équipé'}</p>
+                <p><strong>État:</strong> 
+                    <span style="color: ${mod.is_equipped ? '#38ef7d' : '#f2994a'}">
+                        ${mod.is_equipped ? '✓ Équipé' : '○ Disponible'}
+                    </span>
+                </p>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.add('active');
+}
+
+function closeModModal() {
+    document.getElementById('modModal').classList.remove('active');
+}
+
+async function exportMods() {
+    const allyCode = getStoredAllyCode();
+    if (!allyCode) return;
+
+    try {
+        window.open(`/api/export/mods/${allyCode}`, '_blank');
+        showAlert('Export CSV démarré', 'success');
+    } catch (error) {
+        showAlert('Erreur lors de l\'export', 'error');
+    }
+}
+
+// Fermer le modal en cliquant à l'extérieur
+document.getElementById('modModal').addEventListener('click', (e) => {
+    if (e.target.id === 'modModal') {
+        closeModModal();
+    }
+});
+</script>
+{% endblock %}

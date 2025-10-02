@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+
+{% block title %}Optimiseur de Mods - SWGOH Manager{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="card-header">⚙️ Optimiseur de Mods</h2>
+    
+    <div style="background: rgba(56, 239, 125, 0.1); padding: 1rem; border-radius: 8px; border-left: 4px solid #38ef7d; margin-bottom: 2rem;">
+        <strong>ℹ️ Information:</strong> Cet outil suggère des optimisations de mods basées sur vos priorités. 
+        Les modifications suggérées doivent être appliquées manuellement dans le jeu.
+    </div>
+
+    <div class="form-group">
+        <label>Sélectionnez un Personnage</label>
+        <select id="characterSelect" class="form-control">
+            <option value="">-- Chargement des personnages --</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Preset d'Optimisation</label>
+        <select id="presetSelect" class="form-control" onchange="applyPreset()">
+            <option value="custom">Personnalisé</option>
+            <option value="speed">Vitesse Maximum (GAC/Arena)</option>
+            <option value="offense">Dégâts Maximum (Raids)</option>
+            <option value="tank">Tank (Protection/Santé)</option>
+            <option value="balanced">Équilibré</option>
+        </select>
+    </div>
+
+    <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
+        <h3 style="color: #ffd700; margin-bottom: 1rem;">🎯 Poids des Stats (Priorités)</h3>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+            <div class="form-group">
+                <label>Vitesse: <span id="speedWeight">1.0</span></label>
+                <input type="range" id="speedSlider" min="0" max="2" step="0.1" value="1.0" 
+                       class="form-control" oninput="updateWeight('speed', this.value)">
+            </div>
+            <div class="form-group">
+                <label>Offense: <span id="offenseWeight">0.5</span></label>
+                <input type="range" id="offenseSlider" min="0" max="2" step="0.1" value="0.5" 
+                       class="form-control" oninput="updateWeight('offense', this.value)">
+            </div>
+            <div class="form-group">
+                <label>Protection: <span id="protectionWeight">0.3</span></label>
+                <input type="range" id="protectionSlider" min="0" max="2" step="0.1" value="0.3" 
+                       class="form-control" oninput="updateWeight('protection', this.value)">
+            </div>
+            <div class="form-group">
+                <label>Santé: <span id="healthWeight">0.3</span></label>
+                <input type="range" id="healthSlider" min="0" max="2" step="0.1" value="0.3" 
+                       class="form-control" oninput="updateWeight('health', this.value)">
+            </div>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <button class="btn btn-success" onclick="runOptimization()">
+            🚀 Lancer l'Optimisation
+        </button>
+        <button class="btn" onclick="resetWeights()">
+            🔄 Réinitialiser les Poids
+        </button>
+        <button class="btn btn-warning" onclick="exportOptimization()">
+            💾 Exporter la Configuration
+        </button>
+    </div>
+</div>
+
+<div id="resultsSection" style="display: none;">
+    <div class="card">
+        <h2 class="card-header">📊 Résultats de l'Optimisation</h2>
+        
+        <div id="characterInfo" style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
+            <!-- Rempli dynamiquement -->
+        </div>
+
+        <div class="grid" style="margin-bottom: 2rem;">
+            <div class="stat-card" style="background: linear-gradient(135deg, rgba(56, 239, 125, 0.2), rgba(17, 153, 142, 0.2));">
+                <div class="stat-label">Score d'Optimisation</div>
+                <div class="stat-value" id="optScore">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Vitesse Finale</div>
+                <div class="stat-value" id="finalSpeed">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Offense Finale</div>
+                <div class="stat-value" id="finalOffense">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Protection Finale</div>
+                <div class="stat-value" id="finalProtection">0</div>
+            </div>
+        </div>
+
+        <h3 style="color: #ffd700; margin-bottom: 1rem;">📦 Mods Recommandés</h3>
+        <div class="table-container">
+            <table id="recommendedMods">
+                <thead>
+                    <tr>
+                        <th>Slot</th>
+                        <th>Set</th>
+                        <th>Niveau</th>
+                        <th>Stat Primaire</th>
+                        <th>Vitesse</th>
+                        <th>Offense</th>
+                        <th>Protection</th>
+                        <th>Statut Actuel</th>
+                        <th>Action Requise</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rempli dynamiquement -->
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-top: 2rem; padding: 1.5rem; background: rgba(255, 215, 0, 0.1); border-radius: 10px; border-left: 4px solid #ffd700;">
+            <h4 style="color: #ffd700; margin-bottom: 1rem;">📝 Instructions d'Application</h4>
+            <ol id="instructions" style="margin-left: 1.5rem; line-height: 1.8;">
+                <!-- Rempli dynamiquement -->
+            </ol>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-header">📈 Comparaison Avant/Après</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Stat</th>
+                        <th>Avant</th>
+                        <th>Après</th>
+                        <th>Différence</th>
+                    </tr>
+                </thead>
+                <tbody id="comparisonTable">
+                    <!-- Rempli dynamiquement -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let characters = [];
+let currentOptimization = null;
+let statWeights = {
+    speed: 1.0,
+    offense: 0.5,
+    protection: 0.3,
+    health: 0.3
+};
+
+window.addEventListener('DOMContentLoaded', () => {
+    const allyCode = getStoredAllyCode();
+    if (allyCode) {
+        loadCharacters();
+    } else {
+        showAlert('Veuillez d\'abord charger votre roster depuis le Dashboard', 'info');
+        setTimeout(() => window.location.href = '/', 2000);
+    }
+});
+
+async function loadCharacters() {
+    const allyCode = getStoredAllyCode();
+    if (!allyCode) return;
+
+    try {
+        const response = await fetch(`/api/characters/${allyCode}`);
+        const data = await response.json();
+
+        if (data.success) {
+            characters = data.characters;
+            const select = document.getElementById('characterSelect');
+            select.innerHTML = '<option value="">-- Sélectionnez un personnage --</option>';
+            
+            characters.forEach(char => {
+                const option = document.createElement('option');
+                option.value = char.base_id;
+                option.textContent = `${char.name} (G${char.gear_level}, R${char.relic_tier || 0})`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors du chargement des personnages', 'error');
+    }
+}
+
+function updateWeight(stat, value) {
+    statWeights[stat] = parseFloat(value);
+    document.getElementById(`${stat}Weight`).textContent = value;
+    document.getElementById('presetSelect').value = 'custom';
+}
+
+function applyPreset() {
+    const preset = document.getElementById('presetSelect').value;
+    
+    const presets = {
+        speed: { speed: 2.0, offense: 0.3, protection: 0.2, health: 0.2 },
+        offense: { speed: 0.8, offense: 2.0, protection: 0.3, health: 0.3 },
+        tank: { speed: 0.5, offense: 0.2, protection: 2.0, health: 1.5 },
+        balanced: { speed: 1.0, offense: 1.0, protection: 1.0, health: 1.0 }
+    };
+
+    if (preset !== 'custom' && presets[preset]) {
+        statWeights = presets[preset];
+        
+        Object.keys(statWeights).forEach(stat => {
+            const slider = document.getElementById(`${stat}Slider`);
+            if (slider) {
+                slider.value = statWeights[stat];
+                document.getElementById(`${stat}Weight`).textContent = statWeights[stat].toFixed(1);
+            }
+        });
+    }
+}
+
+function resetWeights() {
+    statWeights = { speed: 1.0, offense: 0.5, protection: 0.3, health: 0.3 };
+    
+    ['speed', 'offense', 'protection', 'health'].forEach(stat => {
+        const slider = document.getElementById(`${stat}Slider`);
+        if (slider) {
+            slider.value = statWeights[stat];
+            document.getElementById(`${stat}Weight`).textContent = statWeights[stat].toFixed(1);
+        }
+    });
+    
+    document.getElementById('presetSelect').value = 'custom';
+}
+
+async function runOptimization() {
+    const characterId = document.getElementById('characterSelect').value;
+    
+    if (!characterId) {
+        showAlert('Veuillez sélectionner un personnage', 'error');
+        return;
+    }
+
+    const allyCode = getStoredAllyCode();
+    const btn = event.target;
+    const hideLoading = showLoading(btn);
+
+    try {
+        const response = await fetch('/api/optimize', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                ally_code: allyCode,
+                character_id: characterId,
+                stat_weights: statWeights
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            currentOptimization = data.optimization;
+            displayOptimizationResults();
+            showAlert('Optimisation terminée!', 'success');
+        } else {
+            showAlert('Erreur lors de l\'optimisation', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors de l\'optimisation', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function displayOptimizationResults() {
+    if (!currentOptimization) return;
+
+    const { character, recommended_mods, final_stats, score } = currentOptimization;
+
+    // Affiche les informations du personnage
+    document.getElementById('characterInfo').innerHTML = `
+        <h3 style="color: #ffd700; margin-bottom: 1rem;">${character.name}</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+            <div>
+                <strong>Niveau:</strong> ${character.level}
+            </div>
+            <div>
+                <strong>Gear:</strong> G${character.gear_level}
+            </div>
+            <div>
+                <strong>Relique:</strong> R${character.relic_tier || 0}
+            </div>
+            <div>
+                <strong>GP:</strong> ${formatNumber(character.galactic_power)}
+            </div>
+        </div>
+    `;
+
+    // Affiche les stats finales
+    document.getElementById('optScore').textContent = Math.round(score);
+    document.getElementById('finalSpeed').textContent = Math.round(final_stats.speed);
+    document.getElementById('finalOffense').textContent = formatNumber(Math.round(final_stats.offense));
+    document.getElementById('finalProtection').textContent = formatNumber(Math.round(final_stats.protection));
+
+    // Affiche les mods recommandés
+    const tbody = document.querySelector('#recommendedMods tbody');
+    tbody.innerHTML = '';
+
+    recommended_mods.forEach(mod => {
+        const row = tbody.insertRow();
+        const isEquipped = mod.character_id === character.base_id;
+        
+        row.innerHTML = `
+            <td>${getSlotName(mod.slot)}</td>
+            <td>${getSetName(mod.set_type)}</td>
+            <td>${mod.level}</td>
+            <td>${mod.primary_stat_type}</td>
+            <td style="color: ${mod.speed >= 20 ? '#38ef7d' : mod.speed >= 15 ? '#ffd700' : '#e4e4e4'}">
+                +${mod.speed || 0}
+            </td>
+            <td>+${Math.round(mod.offense || 0)}</td>
+            <td>+${Math.round(mod.protection || 0)}</td>
+            <td>${isEquipped ? '<span style="color: #38ef7d;">✓ Déjà équipé</span>' : 
+                  mod.character_id ? `<span style="color: #f2994a;">Sur ${mod.character_id}</span>` :
+                  '<span style="color: #888;">Non équipé</span>'}</td>
+            <td>${isEquipped ? '✓ Aucune' : '⚠️ Équiper'}</td>
+        `;
+    });
+
+    // Génère les instructions
+    const instructions = document.getElementById('instructions');
+    instructions.innerHTML = '';
+    
+    let stepNumber = 1;
+    recommended_mods.forEach(mod => {
+        if (mod.character_id !== character.base_id) {
+            const li = document.createElement('li');
+            li.textContent = `${mod.character_id ? 
+                `Déséquiper le mod ${getSlotName(mod.slot)} de ${mod.character_id} et l'` :
+                `Équiper le mod ${getSlotName(mod.slot)} (non équipé) sur`} ${character.name}`;
+            instructions.appendChild(li);
+            stepNumber++;
+        }
+    });
+
+    if (stepNumber === 1) {
+        const li = document.createElement('li');
+        li.textContent = 'Aucune modification nécessaire - vos mods sont déjà optimaux!';
+        li.style.color = '#38ef7d';
+        instructions.appendChild(li);
+    }
+
+    // Affiche la section des résultats
+    document.getElementById('resultsSection').style.display = 'block';
+    
+    // Scroll vers les résultats
+    document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+function getSlotName(slot) {
+    const slots = {
+        1: '🟦 Square',
+        2: '🔺 Arrow',
+        3: '💎 Diamond',
+        4: '🔺 Triangle',
+        5: '🔵 Circle',
+        6: '✖️ Cross'
+    };
+    return slots[slot] || slot;
+}
+
+function getSetName(setType) {
+    const sets = {
+        1: 'Health',
+        2: 'Offense',
+        3: 'Defense',
+        4: 'Speed',
+        5: 'Crit Chance',
+        6: 'Crit Damage',
+        7: 'Potency',
+        8: 'Tenacity'
+    };
+    return sets[setType] || 'Unknown';
+}
+
+function formatNumber(num) {
+    if (!num) return '0';
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+function exportOptimization() {
+    if (!currentOptimization) {
+        showAlert('Aucune optimisation à exporter', 'error');
+        return;
+    }
+
+    const dataStr = JSON.stringify(currentOptimization, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `optimization_${currentOptimization.character.base_id}_${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    showAlert('Configuration exportée', 'success');
+}
+</script>
+{% endblock %}
