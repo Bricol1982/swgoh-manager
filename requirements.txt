@@ -9,8 +9,8 @@ Werkzeug==2.3.0
 requests==2.31.0
 
 # Manipulation de données
-pandas==2.0.0
-numpy==1.24.0
+pandas>=2.2.2,<3.0
+numpy==2.1.0
 
 # Base de données (SQLite est inclus avec Python, pas besoin d'installation)
 

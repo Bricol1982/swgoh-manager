@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SWGOH Manager{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header Section -->
+    <div class="dashboard-header">
+        <h1>🎮 SWGOH Manager Dashboard</h1>
+        <p class="subtitle">Gérez et optimisez votre roster Star Wars: Galaxy of Heroes</p>
+    </div>
+
+    <!-- Ally Code Input Section -->
+    <div class="card ally-code-section">
+        <h2>📋 Chargement du Roster</h2>
+        <div class="input-group">
+            <label for="allyCode">Ally Code :</label>
+            <input 
+                type="text" 
+                id="allyCode" 
+                placeholder="123-456-789" 
+                pattern="\d{3}-\d{3}-\d{3}"
+                maxlength="11"
+            >
+            <button id="loadDataBtn" class="btn btn-primary">
+                📥 Récupérer les données
+            </button>
+        </div>
+        <div id="loadingStatus" class="status-message" style="display: none;">
+            <span class="spinner"></span> Chargement en cours...
+        </div>
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+        <div id="successMessage" class="success-message" style="display: none;"></div>
+    </div>
+
+    <!-- Player Info Section -->
+    <div id="playerInfoSection" style="display: none;">
+        <div class="card player-info">
+            <h2>👤 Informations Joueur</h2>
+            <div class="player-details">
+                <div class="player-stat">
+                    <span class="stat-label">Nom :</span>
+                    <span class="stat-value" id="playerName">-</span>
+                </div>
+                <div class="player-stat">
+                    <span class="stat-label">Niveau :</span>
+                    <span class="stat-value" id="playerLevel">-</span>
+                </div>
+                <div class="player-stat">
+                    <span class="stat-label">Guilde :</span>
+                    <span class="stat-value" id="guildName">-</span>
+                </div>
+                <div class="player-stat">
+                    <span class="stat-label">Dernière mise à jour :</span>
+                    <span class="stat-value" id="lastUpdate">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-content">
+                    <h3>Galactic Power</h3>
+                    <p class="stat-number" id="totalGP">0</p>
+                    <span class="stat-subtitle">Power Total</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-content">
+                    <h3>Personnages</h3>
+                    <p class="stat-number" id="totalCharacters">0</p>
+                    <span class="stat-subtitle">Roster Total</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎖️</div>
+                <div class="stat-content">
+                    <h3>Reliques</h3>
+                    <p class="stat-number" id="totalRelics">0</p>
+                    <span class="stat-subtitle">R5 et plus</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔷</div>
+                <div class="stat-content">
+                    <h3>Mods</h3>
+                    <p class="stat-number" id="totalMods">0</p>
+                    <span class="stat-subtitle">Équipés + Stock</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Characters -->
+        <div class="card">
+            <h2>🏆 Top 10 Personnages (GP)</h2>
+            <div id="topCharacters" class="top-characters-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <h2>⚡ Actions Rapides</h2>
+            <div class="quick-actions">
+                <a href="/mods" class="action-btn">
+                    <div class="action-icon">🔷</div>
+                    <div class="action-text">
+                        <h3>Gérer les Mods</h3>
+                        <p>Visualiser et filtrer vos mods</p>
+                    </div>
+                </a>
+                <a href="/optimizer" class="action-btn">
+                    <div class="action-icon">🚀</div>
+                    <div class="action-text">
+                        <h3>Optimiser</h3>
+                        <p>Optimiser les mods de vos personnages</p>
+                    </div>
+                </a>
+                <a href="/loadouts" class="action-btn">
+                    <div class="action-icon">📋</div>
+                    <div class="action-text">
+                        <h3>Loadouts</h3>
+                        <p>Gérer vos compositions d'équipes</p>
+                    </div>
+                </a>
+                <a href="/gac" class="action-btn">
+                    <div class="action-icon">⚔️</div>
+                    <div class="action-text">
+                        <h3>GAC Compare</h3>
+                        <p>Comparer avec un adversaire</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.dashboard-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.dashboard-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    color: #a0aec0;
+    font-size: 1.1rem;
+}
+
+.ally-code-section {
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border: 2px solid #667eea50;
+}
+
+.input-group {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.input-group label {
+    font-weight: 600;
+    min-width: 100px;
+}
+
+.input-group input {
+    flex: 1;
+    padding: 0.75rem;
+    background: #2d3748;
+    border: 1px solid #4a5568;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 1rem;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #667eea;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.status-message, .error-message, .success-message {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.status-message {
+    background: #2c5282;
+    color: #90cdf4;
+    border-left: 4px solid #3182ce;
+}
+
+.error-message {
+    background: #742a2a;
+    color: #feb2b2;
+    border-left: 4px solid #e53e3e;
+}
+
+.success-message {
+    background: #22543d;
+    color: #9ae6b4;
+    border-left: 4px solid #38a169;
+}
+
+.player-info {
+    background: linear-gradient(135deg, #1e3a8a15 0%, #3730a315 100%);
+}
+
+.player-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.player-stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    color: #a0aec0;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    color: #e2e8f0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border: 1px solid #4a5568;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+}
+
+.stat-icon {
+    font-size: 3rem;
+    opacity: 0.9;
+}
+
+.stat-content h3 {
+    color: #a0aec0;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #667eea;
+    margin: 0;
+}
+
+.stat-subtitle {
+    color: #718096;
+    font-size: 0.85rem;
+}
+
+.top-characters-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.character-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #2d3748;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+    transition: transform 0.2s;
+}
+
+.character-item:hover {
+    transform: translateX(4px);
+    background: #374151;
+}
+
+.character-name {
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.character-gp {
+    color: #667eea;
+    font-weight: 700;
+}
+
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    border-radius: 12px;
+    border: 2px solid #4a5568;
+    text-decoration: none;
+    transition: all 0.3s;
+}
+
+.action-btn:hover {
+    border-color: #667eea;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.2);
+}
+
+.action-icon {
+    font-size: 2.5rem;
+}
+
+.action-text h3 {
+    color: #e2e8f0;
+    margin-bottom: 0.25rem;
+    font-size: 1.1rem;
+}
+
+.action-text p {
+    color: #a0aec0;
+    font-size: 0.9rem;
+    margin: 0;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const allyCodeInput = document.getElementById('allyCode');
+    const loadDataBtn = document.getElementById('loadDataBtn');
+    const loadingStatus = document.getElementById('loadingStatus');
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+    const playerInfoSection = document.getElementById('playerInfoSection');
+
+    // Format ally code input
+    allyCodeInput.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/[^\d]/g, '');
+        if (value.length > 3 && value.length <= 6) {
+            value = value.slice(0, 3) + '-' + value.slice(3);
+        } else if (value.length > 6) {
+            value = value.slice(0, 3) + '-' + value.slice(3, 6) + '-' + value.slice(6, 9);
+        }
+        e.target.value = value;
+    });
+
+    // Load data button
+    loadDataBtn.addEventListener('click', async function() {
+        const allyCode = allyCodeInput.value.replace(/-/g, '');
+        
+        if (allyCode.length !== 9) {
+            showError('Veuillez entrer un Ally Code valide (9 chiffres)');
+            return;
+        }
+
+        hideMessages();
+        loadingStatus.style.display = 'block';
+        loadDataBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/load_player_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ally_code: allyCode })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showSuccess('Données chargées avec succès !');
+                displayPlayerData(data);
+            } else {
+                showError(data.error || 'Erreur lors du chargement des données');
+            }
+        } catch (error) {
+            showError('Erreur de connexion au serveur');
+            console.error('Error:', error);
+        } finally {
+            loadingStatus.style.display = 'none';
+            loadDataBtn.disabled = false;
+        }
+    });
+
+    function displayPlayerData(data) {
+        // Player info
+        document.getElementById('playerName').textContent = data.player.name || '-';
+        document.getElementById('playerLevel').textContent = data.player.level || '-';
+        document.getElementById('guildName').textContent = data.player.guild_name || 'Aucune';
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleString('fr-FR');
+
+        // Stats
+        document.getElementById('totalGP').textContent = formatNumber(data.stats.total_gp);
+        document.getElementById('totalCharacters').textContent = data.stats.total_characters;
+        document.getElementById('totalRelics').textContent = data.stats.relics_r5_plus;
+        document.getElementById('totalMods').textContent = data.stats.total_mods;
+
+        // Top characters
+        const topCharactersDiv = document.getElementById('topCharacters');
+        topCharactersDiv.innerHTML = '';
+        
+        data.top_characters.forEach((char, index) => {
+            const charDiv = document.createElement('div');
+            charDiv.className = 'character-item';
+            charDiv.innerHTML = `
+                <span class="character-name">${index + 1}. ${char.name}</span>
+                <span class="character-gp">${formatNumber(char.gp)} GP</span>
+            `;
+            topCharactersDiv.appendChild(charDiv);
+        });
+
+        // Show player info section
+        playerInfoSection.style.display = 'block';
+    }
+
+    function formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    }
+
+    function showError(message) {
+        hideMessages();
+        errorMessage.textContent = '❌ ' + message;
+        errorMessage.style.display = 'block';
+    }
+
+    function showSuccess(message) {
+        hideMessages();
+        successMessage.textContent = '✅ ' + message;
+        successMessage.style.display = 'block';
+        setTimeout(() => {
+            successMessage.style.display = 'none';
+        }, 5000);
+    }
+
+    function hideMessages() {
+        errorMessage.style.display = 'none';
+        successMessage.style.display = 'none';
+    }
+
+    // Check if there's already loaded data
+    fetch('/api/check_loaded_data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.has_data) {
+                displayPlayerData(data);
+            }
+        })
+        .catch(error => console.log('No previous data loaded'));
+});
+</script>
+{% endblock %}
