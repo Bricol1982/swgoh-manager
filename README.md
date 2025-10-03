@@ -77,19 +77,18 @@ requests==2.31.0
 pandas==2.0.0
 ```
 
-### 3. Installer les dépendances
+### 3. Installer l'environnement virtuel et les dépendances
 
 Ouvrez un terminal/invite de commandes dans le dossier du projet et exécutez :
 
-```bash
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
+
 pip install -r requirements.txt
-```
 
 Ou installez les packages individuellement :
 
-```bash
 pip install Flask requests pandas
-```
 
 ### 4. Configuration de l'API (Optionnel)
 
