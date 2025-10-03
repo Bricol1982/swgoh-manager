@@ -1,22 +1,22 @@
-# SWGOH Personal Manager - Dépendances Python
+# SWGOH Manager - Requirements
 # Installation: pip install -r requirements.txt
 
 # Framework Web
-Flask==2.3.0
-Werkzeug==2.3.0
+Flask==3.0.0
+Werkzeug==3.0.1
 
-# Requêtes HTTP
+# Scraping et HTTP
+cloudscraper==1.2.71
 requests==2.31.0
+beautifulsoup4==4.12.2
+lxml>=5.3.0
 
-# Manipulation de données
-pandas>=2.2.2,<3.0
-numpy==2.1.0
+# Data manipulation
+pandas>=2.2.3
+numpy>=1.26.3
 
-# Base de données (SQLite est inclus avec Python, pas besoin d'installation)
-
-# Optionnel: Pour des graphiques avancés (non utilisé actuellement mais disponible)
-# matplotlib==3.7.0
-# plotly==5.14.0
+# Configuration
+python-dotenv==1.0.0
 
 # Utilitaires
 python-dateutil==2.8.2

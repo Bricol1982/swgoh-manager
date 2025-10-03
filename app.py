@@ -13,6 +13,12 @@ from datetime import datetime
 import io
 import os
 from collections import defaultdict
+from dotenv import load_dotenv
+from bs4 import BeautifulSoup
+import re
+
+# Charge les variables d'environnement
+load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
@@ -20,7 +26,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-
 # Configuration API
 SWGOH_HELP_API_URL = "https://api.swgoh.help"
 SWGOH_GG_API_URL = "https://swgoh.gg/api"
-API_TOKEN = os.environ.get('SWGOH_API_TOKEN', 'YOUR_API_TOKEN_HERE')
+API_TOKEN = os.environ.get('SWGOH_API_TOKEN', '')
 
 # ==================== BASE DE DONNÉES ====================
 
@@ -115,198 +121,258 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# ==================== API HELPERS ====================" 
+
+def parse_character_roster(html):
+    """Parse le roster de personnages depuis la page HTML - Version finale"""
+    soup = BeautifulSoup(html, 'html.parser')
+    roster = []
+    
+    try:
+        print("🔍 Recherche des cartes de personnages...")
+        
+        # La nouvelle structure utilise div.unit-card
+        unit_cards = soup.find_all('div', class_='unit-card')
+        print(f"✅ {len(unit_cards)} unit-cards trouvées")
+        
+        for card in unit_cards:
+            try:
+                character = parse_unit_card(card)
+                if character:
+                    roster.append(character)
+            except Exception as e:
+                continue
+        
+        if roster:
+            print(f"✅ {len(roster)} personnages extraits avec succès")
+        else:
+            print("⚠️  Aucun personnage extrait")
+        
+    except Exception as e:
+        print(f"❌ Erreur parsing roster: {str(e)}")
+        import traceback
+        traceback.print_exc()
+    
+    return roster
+
+def parse_unit_card(card):
+    """Parse une unit-card (nouvelle structure SWGOH.gg)"""
+    try:
+        # === NOM DU PERSONNAGE ===
+        name = "Unknown"
+        img = card.find('img', class_='character-portrait__img')
+        if img and img.get('alt'):
+            name = img['alt'].strip()
+        
+        if name == "Unknown":
+            link = card.find('a', href=re.compile(r'/characters/'))
+            if link:
+                match = re.search(r'/characters/([^/]+)/', link.get('href', ''))
+                if match:
+                    name = match.group(1).replace('-', ' ').title()
+        
+        # === BASE ID ===
+        base_id = ""
+        link = card.find('a', href=re.compile(r'/characters/'))
+        if link:
+            match = re.search(r'/characters/([^/]+)/', link['href'])
+            if match:
+                base_id = match.group(1).upper().replace('-', '')
+        
+        if not base_id:
+            base_id = name.upper().replace(' ', '').replace("'", '').replace('-', '')
+        
+        # === GEAR LEVEL ===
+        gear_level = 1
+        gear_elem = card.find('div', class_=re.compile(r'.*gear.*', re.I))
+        if gear_elem:
+            text = gear_elem.get_text(strip=True)
+            gear_match = re.search(r'(\d+)', text)
+            if gear_match:
+                gear_level = int(gear_match.group(1))
+        
+        if gear_level == 1:
+            for class_name in card.get('class', []):
+                if 'gear' in class_name.lower():
+                    gear_match = re.search(r'(\d+)', class_name)
+                    if gear_match:
+                        gear_level = int(gear_match.group(1))
+                        break
+        
+        # === RELIC TIER ===
+        relic_tier = 0
+        for class_name in card.get('class', []):
+            if 'tier' in class_name.lower() or 'relic' in class_name.lower():
+                tier_match = re.search(r'(\d+)', class_name)
+                if tier_match:
+                    relic_tier = int(tier_match.group(1))
+                    break
+        
+        if relic_tier == 0:
+            relic_elem = card.find(class_=re.compile(r'.*tier.*|.*relic.*', re.I))
+            if relic_elem:
+                text = relic_elem.get_text(strip=True)
+                relic_match = re.search(r'(\d+)', text)
+                if relic_match:
+                    relic_tier = int(relic_match.group(1))
+        
+        # === GALACTIC POWER ===
+        power = 0
+        all_text = card.get_text()
+        power_matches = re.findall(r'(\d{1,3}(?:,\\d{3})+|\\d{4,})', all_text)
+        if power_matches:
+            powers = [int(p.replace(',', '')) for p in power_matches]
+            power = max(powers) if powers else 0
+        
+        # === FLAGS ===
+        is_gl = 'galactic-legend' in ' '.join(card.get('class', [])).lower()
+        has_ultimate = 'ultimate' in ' '.join(card.get('class', [])).lower()
+        
+        if name and name != "Unknown" and len(name) > 1:
+            character = {
+                'base_id': base_id,
+                'name': name,
+                'level': 85,
+                'gear_level': gear_level,
+                'relic_tier': relic_tier,
+                'power': power,
+                'galactic_power': power,
+                'combat_type': 1,
+                'has_ultimate': has_ultimate,
+                'mods': []
+            }
+            return character
+        
+        return None
+        
+    except Exception as e:
+        return None
+
 # ==================== API HELPERS ====================
 
+import cloudscraper
+from bs4 import BeautifulSoup
+import re
+
 def fetch_player_data(ally_code):
-    """Récupère les données du joueur via l'API SWGOH.gg"""
+    """Récupère les données du joueur via SWGOH.gg avec cloudscraper"""
     try:
-        clean_code = ally_code.replace('-', '')
-        url = f"{SWGOH_GG_API_URL}/player/{clean_code}/"
+        clean_code = ally_code.replace('-', '').strip()
+        print(f"\n{'='*60}")
+        print(f"🔍 Récupération des données pour: {clean_code}")
+        print(f"{'='*60}")
         
-        response = requests.get(url, timeout=10)
+        # Création du scraper cloudflare
+        scraper = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'mobile': False
+            }
+        )
         
-        if response.status_code == 200:
-            return response.json()
-        else:
+        # URL du profil
+        profile_url = f"https://swgoh.gg/p/{clean_code}/"
+        print(f"📡 URL: {profile_url}")
+        
+        # Récupération de la page
+        response = scraper.get(profile_url, timeout=20)
+        
+        if response.status_code != 200:
+            print(f"⚠️  Erreur HTTP {response.status_code}")
+            print("📊 Utilisation des données de démonstration")
             return generate_demo_data(clean_code)
-    except Exception as e:
-        print(f"Erreur API: {e}")
-        return generate_demo_data(ally_code.replace('-', ''))
-
-def generate_demo_data(ally_code):
-    """Génère des données de démonstration pour tests"""
-    return {
-        'data': {
-            'name': 'Demo Player',
-            'level': 85,
-            'guild_name': 'Demo Guild',
-            'ally_code': ally_code,
-            'galactic_power': 5234567,
-            'character_galactic_power': 3654321,
-            'ship_galactic_power': 1580246,
-            'roster': [
-                {
-                    'base_id': 'ANAKINKNIGHT',
-                    'name': 'Jedi Knight Anakin',
-                    'level': 85,
-                    'gear_level': 13,
-                    'relic_tier': 7,
-                    'power': 28500,
-                    'galactic_power': 28500,
-                    'combat_type': 1,
-                    'has_ultimate': False,
-                    'mods': [
-                        {
-                            'id': 'mod1',
-                            'slot': 1,
-                            'set': 4,
-                            'level': 15,
-                            'tier': 5,
-                            'rarity': 5,
-                            'primary_stat': {'name': 'Speed', 'value': 30},
-                            'secondary_stats': [
-                                {'name': 'Speed', 'value': 18},
-                                {'name': 'Offense', 'value': 215}
-                            ]
-                        }
-                    ]
-                },
-                {
-                    'base_id': 'GRANDMASTERYODA',
-                    'name': 'Grand Master Yoda',
-                    'level': 85,
-                    'gear_level': 12,
-                    'relic_tier': 5,
-                    'power': 25000,
-                    'galactic_power': 25000,
-                    'combat_type': 1,
-                    'has_ultimate': False,
-                    'mods': []
-                },
-                {
-                    'base_id': 'DARTHREVAN',
-                    'name': 'Darth Revan',
-                    'level': 85,
-                    'gear_level': 13,
-                    'relic_tier': 8,
-                    'power': 29800,
-                    'galactic_power': 29800,
-                    'combat_type': 1,
-                    'has_ultimate': False,
-                    'mods': []
-                },
-                {
-                    'base_id': 'GENERALKENOBI',
-                    'name': 'General Kenobi',
-                    'level': 85,
-                    'gear_level': 13,
-                    'relic_tier': 7,
-                    'power': 27200,
-                    'galactic_power': 27200,
-                    'combat_type': 1,
-                    'has_ultimate': False,
-                    'mods': []
-                },
-                {
-                    'base_id': 'BASTILASHAN',
-                    'name': 'Bastila Shan',
-                    'level': 85,
-                    'gear_level': 12,
-                    'relic_tier': 6,
-                    'power': 26100,
-                    'galactic_power': 26100,
-                    'combat_type': 1,
-                    'has_ultimate': False,
-                    'mods': []
-                }
-            ]
-        }
-    }
-
-def save_player_data(ally_code, data):
-    """Sauvegarde les données du joueur dans la base de données"""
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    try:
-        player_data = data.get('data', data)
         
-        # Sauvegarde infos joueur
-        c.execute('''INSERT OR REPLACE INTO player_info 
-                     (ally_code, name, level, guild_name, galactic_power, character_gp, ship_gp, last_updated)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (ally_code, 
-                   player_data.get('name', 'Unknown'),
-                   player_data.get('level', 85),
-                   player_data.get('guild_name', 'No Guild'),
-                   player_data.get('galactic_power', 0),
-                   player_data.get('character_galactic_power', 0),
-                   player_data.get('ship_galactic_power', 0),
-                   datetime.now()))
+        print("✅ Page récupérée avec succès")
         
-        # Supprime les anciennes données
-        c.execute('DELETE FROM characters WHERE ally_code = ?', (ally_code,))
-        c.execute('DELETE FROM mods WHERE ally_code = ?', (ally_code,))
+        # Parse la page avec BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Sauvegarde personnages
-        for unit in player_data.get('roster', []):
-            if unit.get('combat_type') == 1:  # Personnages uniquement
-                c.execute('''INSERT INTO characters 
-                           (ally_code, base_id, name, level, gear_level, relic_tier, power, galactic_power)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                         (ally_code,
-                          unit.get('base_id'),
-                          unit.get('name'),
-                          unit.get('level', 1),
-                          unit.get('gear_level', 1),
-                          unit.get('relic_tier', 0),
-                          unit.get('power', 0),
-                          unit.get('galactic_power', 0)))
+        # === EXTRACTION DU NOM DU JOUEUR ===
+        player_name = "Unknown Player"
+        name_elem = soup.find('h5', class_='pull-left')
+        if name_elem:
+            player_name = name_elem.get_text(strip=True)
+            print(f"👤 Joueur: {player_name}")
+        
+        # === EXTRACTION DE LA GUILDE ===
+        guild_name = "No Guild"
+        guild_elem = soup.find('a', href=re.compile(r'/g/'))
+        if guild_elem:
+            guild_name = guild_elem.get_text(strip=True)
+            print(f"🏰 Guilde: {guild_name}")
+        
+        # === EXTRACTION DU GALACTIC POWER ===
+        gp_total = 0
+        gp_char = 0
+        gp_ship = 0
+        
+        # Méthode 1 : via les divs profile-stat
+        stats_divs = soup.find_all('div', class_='profile-stat')
+        for stat_div in stats_divs:
+            label_div = stat_div.find('div', class_='stat-label')
+            value_div = stat_div.find('div', class_='stat-value')
+            
+            if label_div and value_div:
+                label_text = label_div.get_text(strip=True).lower()
+                value_text = value_div.get_text(strip=True).replace(',', '').replace(' ', '')
                 
-                # Sauvegarde mods équipés
-                for mod in unit.get('mods', []):
-                    save_mod(c, ally_code, unit.get('base_id'), mod, is_equipped=True)
+                try:
+                    value_int = int(re.sub(r'[^\d]', '', value_text))
+                    
+                    if 'galactic power' in label_text:
+                        if 'character' in label_text:
+                            gp_char = value_int
+                        elif 'ship' in label_text:
+                            gp_ship = value_int
+                        else:
+                            gp_total = value_int
+                except (ValueError, AttributeError):
+                    pass
         
-        conn.commit()
-        return True
+        # Si pas trouvé, calculer le total
+        if gp_total == 0 and (gp_char > 0 or gp_ship > 0):
+            gp_total = gp_char + gp_ship
+        
+        print(f"⚡ GP Total: {gp_total:,}")
+        print(f"👥 GP Personnages: {gp_char:,}")
+        print(f"🚀 GP Vaisseaux: {gp_ship:,}")
+        
+        # === RÉCUPÉRATION DU ROSTER ===
+        print(f"\n📋 Récupération du roster de personnages...")
+        roster_url = f"https://swgoh.gg/p/{clean_code}/characters/"
+        roster_response = scraper.get(roster_url, timeout=20)
+        
+        roster = []
+        if roster_response.status_code == 200:
+            print("✅ Page roster récupérée")
+            roster = parse_character_roster(roster_response.text)
+            print(f"✅ {len(roster)} personnages extraits")
+        else:
+            print(f"⚠️  Impossible de récupérer le roster (HTTP {roster_response.status_code})")
+        
+        print(f"{'='*60}\n")
+        
+        # Retour au format attendu
+        return {
+            'data': {
+                'name': player_name,
+                'level': 85,
+                'guild_name': guild_name,
+                'ally_code': clean_code,
+                'galactic_power': gp_total,
+                'character_galactic_power': gp_char,
+                'ship_galactic_power': gp_ship,
+                'roster': roster
+            }
+        }
+        
     except Exception as e:
-        print(f"Erreur sauvegarde: {e}")
-        conn.rollback()
-        return False
-    finally:
-        conn.close()
-
-def save_mod(cursor, ally_code, character_id, mod_data, is_equipped=True):
-    """Sauvegarde un mod dans la base de données"""
-    secondary_stats = {}
-    for stat in mod_data.get('secondary_stats', []):
-        stat_type = stat.get('name', '').lower()
-        stat_value = stat.get('value', 0)
-        
-        if 'speed' in stat_type:
-            secondary_stats['speed'] = stat_value
-        elif 'offense' in stat_type and '%' not in stat_type:
-            secondary_stats['offense'] = stat_value
-        elif 'offense' in stat_type and '%' in stat_type:
-            secondary_stats['offense_percent'] = stat_value
-    
-    cursor.execute('''INSERT OR REPLACE INTO mods 
-                   (id, ally_code, character_id, slot, set_type, level, tier, rarity,
-                    primary_stat_type, primary_stat_value, speed, offense, is_equipped)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                 (mod_data.get('id', f"{ally_code}_{character_id}_{mod_data.get('slot')}"),
-                  ally_code,
-                  character_id if is_equipped else None,
-                  mod_data.get('slot', 1),
-                  mod_data.get('set', 1),
-                  mod_data.get('level', 1),
-                  mod_data.get('tier', 1),
-                  mod_data.get('rarity', 5),
-                  mod_data.get('primary_stat', {}).get('name', 'Unknown'),
-                  mod_data.get('primary_stat', {}).get('value', 0),
-                  secondary_stats.get('speed', 0),
-                  secondary_stats.get('offense', 0),
-                  1 if is_equipped else 0))
+        print(f"❌ Erreur lors du scraping: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("📊 Utilisation des données de démonstration")
+        return generate_demo_data(ally_code.replace('-', ''))
 
 # ==================== OPTIMISATION ====================
 
@@ -317,13 +383,15 @@ def calculate_character_score(character, mod_config, stat_weights):
     base_stats = {
         'speed': 100 + (character['gear_level'] * 5) + (character['relic_tier'] * 10),
         'offense': 1000 + (character['gear_level'] * 100),
-        'protection': 10000 + (character['gear_level'] * 1000)
+        'protection': 10000 + (character['gear_level'] * 1000),
+        'health': 15000 + (character['gear_level'] * 1500)
     }
     
     for mod in mod_config:
         base_stats['speed'] += mod.get('speed', 0)
         base_stats['offense'] += mod.get('offense', 0)
         base_stats['protection'] += mod.get('protection', 0)
+        base_stats['health'] += mod.get('health', 0)
     
     for stat, weight in stat_weights.items():
         score += base_stats.get(stat, 0) * weight
@@ -337,7 +405,13 @@ def optimize_mods_for_character(ally_code, character_id, stat_weights):
     
     c.execute('SELECT * FROM characters WHERE ally_code = ? AND base_id = ?', 
               (ally_code, character_id))
-    character = dict(c.fetchone())
+    character_row = c.fetchone()
+    
+    if not character_row:
+        conn.close()
+        return None
+    
+    character = dict(character_row)
     
     c.execute('''SELECT * FROM mods 
                  WHERE ally_code = ? AND (is_equipped = 0 OR character_id = ?)''',
@@ -418,7 +492,13 @@ def load_player_data():
         
         # Info joueur
         c.execute('SELECT * FROM player_info WHERE ally_code = ?', (ally_code,))
-        player = dict(c.fetchone())
+        player_row = c.fetchone()
+        
+        if not player_row:
+            conn.close()
+            return jsonify({'error': 'Erreur lors de la récupération des données'}), 500
+            
+        player = dict(player_row)
         
         # Statistiques
         c.execute('SELECT COUNT(*) as count FROM characters WHERE ally_code = ?', (ally_code,))
@@ -571,11 +651,13 @@ def get_mods(ally_code):
     df = pd.read_sql_query(query, conn, params=(ally_code,))
     conn.close()
     
+    unequipped_count = len(df[df['is_equipped'] == 0]) if 'is_equipped' in df.columns else 0
+    
     return jsonify({
         'success': True,
         'mods': df.to_dict('records'),
         'total': len(df),
-        'unequipped': len(df[df['is_equipped'] == 0]) if 'is_equipped' in df.columns else 0
+        'unequipped': unequipped_count
     })
 
 @app.route('/api/optimize', methods=['POST'])
@@ -588,15 +670,19 @@ def optimize():
     stat_weights = data.get('stat_weights', {
         'speed': 1.0,
         'offense': 0.5,
-        'protection': 0.3
+        'protection': 0.3,
+        'health': 0.3
     })
     
     result = optimize_mods_for_character(ally_code, character_id, stat_weights)
     
-    return jsonify({
-        'success': True,
-        'optimization': result
-    })
+    if result:
+        return jsonify({
+            'success': True,
+            'optimization': result
+        })
+    else:
+        return jsonify({'error': 'Personnage non trouvé'}), 404
 
 @app.route('/api/loadout/save', methods=['POST'])
 def save_loadout():
@@ -737,14 +823,19 @@ def internal_error(error):
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
-    print("Initialisation de la base de données...")
+    print("=" * 60)
+    print("SWGOH Personal Manager - Initialisation")
+    print("=" * 60)
+    print("📦 Initialisation de la base de données...")
     init_db()
-    print("Base de données prête!")
-    print("\n" + "="*50)
-    print("SWGOH Personal Manager - Serveur démarré")
-    print("="*50)
-    print("Accédez à l'application via: http://localhost:5000")
-    print("Appuyez sur Ctrl+C pour arrêter le serveur")
-    print("="*50 + "\n")
+    print("✓ Base de données prête!")
+    print("\n" + "=" * 60)
+    print("🚀 SWGOH Personal Manager - Serveur démarré")
+    print("=" * 60)
+    print("🌐 Accédez à l'application via: http://localhost:5000")
+    print("📱 Ou depuis votre réseau local: http://[votre-ip]:5000")
+    print("⚠️  Mode démonstration activé si l'API SWGOH.gg est inaccessible")
+    print("\n💡 Appuyez sur Ctrl+C pour arrêter le serveur")
+    print("=" * 60 + "\n")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
