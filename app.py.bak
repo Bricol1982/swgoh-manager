@@ -125,96 +125,80 @@ def get_db_connection():
 # ==================== PARSING ====================
 
 def parse_unit_card(card):
-    """Parse une unit-card (structure SWGOH.gg 2024-2025)"""
+    """Parse une unit-card (nouvelle structure SWGOH.gg)"""
     try:
         # === NOM DU PERSONNAGE ===
-        # Le nom n'est PAS dans l'attribut alt (vide), mais dans le texte de la carte
         name = "Unknown"
-        
-        # Récupère tout le texte de la carte
-        card_text = card.get_text(separator='|', strip=True)
-        lines = [line.strip() for line in card_text.split('|') if line.strip()]
-        
-        # Le nom est généralement une ligne plus longue que les autres
-        # Évite les chiffres seuls, pourcentages, etc.
-        for line in lines:
-            # Critères pour identifier un nom de personnage
-            if (len(line) > 5 and  # Assez long
-                len(line) < 60 and  # Pas trop long
-                not line.replace('%', '').replace(',', '').isdigit() and  # Pas que des chiffres
-                '%' not in line and  # Pas un pourcentage
-                any(c.isalpha() for c in line)):  # Contient des lettres
-                
-                # Vérifie que c'est bien un nom plausible
-                words = line.split()
-                if len(words) >= 2 or any(keyword in line.lower() for keyword in 
-                    ['commander', 'captain', 'general', 'master', 'lord', 'dark', 'jedi', 
-                     'trooper', 'pilot', 'clone', 'droid', 'vader', 'skywalker', 'yoda',
-                     'kenobi', 'ahsoka', 'revan', 'malak', 'bane', 'maul', 'rey', 'kylo']):
-                    name = line
-                    break
-        
-        # === BASE ID depuis l'URL de l'image ===
-        base_id = ""
         img = card.find('img', class_='character-portrait__img')
-        if img and img.get('src'):
-            src = img['src']
-            # Format: tex.charui_CHARACTERID.png
-            match = re.search(r'tex\.charui_([^.]+)\.png', src)
-            if match:
-                base_id = match.group(1).upper().replace('_', '')
+        if img and img.get('alt'):
+            name = img['alt'].strip()
         
-        # Si pas de base_id trouvé, utilise le nom
-        if not base_id and name != "Unknown":
+        if name == "Unknown":
+            link = card.find('a', href=re.compile(r'/characters/'))
+            if link:
+                match = re.search(r'/characters/([^/]+)/', link.get('href', ''))
+                if match:
+                    name = match.group(1).replace('-', ' ').title()
+        
+        # === BASE ID ===
+        base_id = ""
+        link = card.find('a', href=re.compile(r'/characters/'))
+        if link:
+            match = re.search(r'/characters/([^/]+)/', link['href'])
+            if match:
+                base_id = match.group(1).upper().replace('-', '')
+        
+        if not base_id:
             base_id = name.upper().replace(' ', '').replace("'", '').replace('-', '')
         
         # === GEAR LEVEL ===
-        gear_level = 13  # Défaut G13 pour les personnages modernes
+        gear_level = 1
+        gear_elem = card.find('div', class_=re.compile(r'.*gear.*', re.I))
+        if gear_elem:
+            text = gear_elem.get_text(strip=True)
+            gear_match = re.search(r'(\d+)', text)
+            if gear_match:
+                gear_level = int(gear_match.group(1))
+        
+        if gear_level == 1:
+            for class_name in card.get('class', []):
+                if 'gear' in class_name.lower():
+                    gear_match = re.search(r'(\d+)', class_name)
+                    if gear_match:
+                        gear_level = int(gear_match.group(1))
+                        break
         
         # === RELIC TIER ===
         relic_tier = 0
-        # Cherche dans les SVG (le tier de relique est affiché dans un SVG)
-        for svg in card.find_all('svg'):
-            text_elem = svg.find('text')
-            if text_elem:
-                tier_text = text_elem.get_text(strip=True)
-                if tier_text.isdigit() and int(tier_text) <= 9:
-                    relic_tier = int(tier_text)
+        for class_name in card.get('class', []):
+            if 'tier' in class_name.lower() or 'relic' in class_name.lower():
+                tier_match = re.search(r'(\d+)', class_name)
+                if tier_match:
+                    relic_tier = int(tier_match.group(1))
                     break
         
-        # === ZETAS ===
-        zeta_count = 0
-        for svg in card.find_all('svg'):
-            text_elem = svg.find('text')
-            if text_elem:
-                zeta_text = text_elem.get_text(strip=True)
-                if zeta_text.isdigit() and int(zeta_text) <= 10:
-                    # Distingue zeta (petit nombre) vs relic (déjà trouvé)
-                    if relic_tier == 0:
-                        zeta_count = int(zeta_text)
+        if relic_tier == 0:
+            relic_elem = card.find(class_=re.compile(r'.*tier.*|.*relic.*', re.I))
+            if relic_elem:
+                text = relic_elem.get_text(strip=True)
+                relic_match = re.search(r'(\d+)', text)
+                if relic_match:
+                    relic_tier = int(relic_match.group(1))
         
         # === GALACTIC POWER ===
-        power = 20000  # Défaut
-        # Cherche les nombres à 5-6 chiffres dans le texte
-        numbers = re.findall(r'(\d{1,3}(?:,\d{3})+|\d{5,6})', card_text)
-        if numbers:
-            valid_powers = []
-            for num in numbers:
-                clean_num = int(num.replace(',', ''))
-                # Le GP est généralement entre 10k et 35k
-                if 10000 <= clean_num <= 35000:
-                    valid_powers.append(clean_num)
-            if valid_powers:
-                power = max(valid_powers)
+        power = 0
+        all_text = card.get_text()
+        power_matches = re.findall(r'(\d{1,3}(?:,\d{3})+|\d{4,})', all_text)
+        if power_matches:
+            powers = [int(p.replace(',', '')) for p in power_matches]
+            power = max(powers) if powers else 0
         
         # === FLAGS ===
-        classes_str = ' '.join(card.get('class', []))
-        is_gl = 'galactic-legend' in classes_str.lower()
-        has_ultimate = 'has-ultimate' in classes_str.lower()
+        is_gl = 'galactic-legend' in ' '.join(card.get('class', [])).lower()
+        has_ultimate = 'ultimate' in ' '.join(card.get('class', [])).lower()
         
-        # Retourne le personnage si valide
-        if name and name != "Unknown" and base_id:
-            return {
+        if name and name != "Unknown" and len(name) > 1:
+            character = {
                 'base_id': base_id,
                 'name': name,
                 'level': 85,
@@ -224,10 +208,9 @@ def parse_unit_card(card):
                 'galactic_power': power,
                 'combat_type': 1,
                 'has_ultimate': has_ultimate,
-                'is_galactic_legend': is_gl,
-                'zeta_count': zeta_count,
                 'mods': []
             }
+            return character
         
         return None
         
@@ -242,26 +225,22 @@ def parse_character_roster(html):
     try:
         print("🔍 Recherche des cartes de personnages...")
         
-        # La structure utilise div.unit-card
+        # La nouvelle structure utilise div.unit-card
         unit_cards = soup.find_all('div', class_='unit-card')
         print(f"✅ {len(unit_cards)} unit-cards trouvées")
         
-        success_count = 0
-        for i, card in enumerate(unit_cards):
+        for card in unit_cards:
             try:
                 character = parse_unit_card(card)
                 if character:
                     roster.append(character)
-                    success_count += 1
-                    if success_count <= 3:  # Debug: affiche les 3 premiers
-                        print(f"  ✓ {character['name']} (R{character['relic_tier']}, GP:{character['galactic_power']})")
             except Exception as e:
                 continue
         
         if roster:
             print(f"✅ {len(roster)} personnages extraits avec succès")
         else:
-            print("⚠️  Aucun personnage extrait - structure HTML peut-être changée")
+            print("⚠️  Aucun personnage extrait")
         
     except Exception as e:
         print(f"❌ Erreur parsing roster: {str(e)}")
@@ -1024,16 +1003,16 @@ if __name__ == '__main__':
     print("=" * 60)
     print("SWGOH Personal Manager - Initialisation")
     print("=" * 60)
-    print("Initialisation de la base de donnees...")
+    print("📦 Initialisation de la base de données...")
     init_db()
-    print("Base de donnees prete!")
+    print("✓ Base de données prête!")
     print("\n" + "=" * 60)
-    print("SWGOH Personal Manager - Serveur demarre")
+    print("🚀 SWGOH Personal Manager - Serveur démarré")
     print("=" * 60)
-    print("Accedez a l'application via: http://localhost:5000")
-    print("Ou depuis votre reseau local: http://[votre-ip]:5000")
-    print("Mode demonstration active si l'API SWGOH.gg est inaccessible")
-    print("\nAppuyez sur Ctrl+C pour arreter le serveur")
+    print("🌐 Accédez à l'application via: http://localhost:5000")
+    print("📱 Ou depuis votre réseau local: http://[votre-ip]:5000")
+    print("⚠️  Mode démonstration activé si l'API SWGOH.gg est inaccessible")
+    print("\n💡 Appuyez sur Ctrl+C pour arrêter le serveur")
     print("=" * 60 + "\n")
     
     app.run(debug=True, host='0.0.0.0', port=5000)

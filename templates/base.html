@@ -111,6 +111,11 @@
             transform: translateY(0);
         }
 
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .btn-success {
             background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
         }
@@ -343,8 +348,7 @@
         function getStoredAllyCode() {
             return localStorage.getItem('swgoh_ally_code') || '';
         }
-
-        {% block extra_scripts %}{% endblock %}
     </script>
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

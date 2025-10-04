@@ -21,12 +21,12 @@
             type="text" 
             id="allyCode" 
             class="form-control"
-            placeholder="299-146-629" 
+            placeholder="123-456-789" 
             pattern="\d{3}-\d{3}-\d{3}"
             maxlength="11"
         >
     </div>
-    <button id="loadDataBtn" class="btn btn-success">
+    <button id="loadDataBtn" class="btn">
         📥 Récupérer les données
     </button>
     <div id="loadingStatus" style="display: none; margin-top: 1rem;">
@@ -76,7 +76,7 @@
             <div class="stat-value" id="totalRelics">0</div>
         </div>
         <div class="stat-card">
-            <div style="font-size: 2.5rem;">📷</div>
+            <div style="font-size: 2.5rem;">🔷</div>
             <div class="stat-label">Mods</div>
             <div class="stat-value" id="totalMods">0</div>
         </div>
@@ -109,7 +109,7 @@
                 <div class="stat-card" style="cursor: pointer; transition: transform 0.3s;" 
                      onmouseover="this.style.transform='translateY(-4px)'" 
                      onmouseout="this.style.transform='translateY(0)'">
-                    <div style="font-size: 3rem;">📷</div>
+                    <div style="font-size: 3rem;">🔷</div>
                     <h3 style="color: #ffd700; margin: 0.5rem 0;">Gérer les Mods</h3>
                     <p style="color: #b0b0b0; font-size: 0.9rem; margin: 0;">
                         Visualiser et filtrer vos mods
@@ -156,54 +156,35 @@
 
 {% block extra_scripts %}
 <script>
-console.log('Script index.html chargé');
-
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM chargé');
-    
     const allyCodeInput = document.getElementById('allyCode');
     const loadDataBtn = document.getElementById('loadDataBtn');
     const loadingStatus = document.getElementById('loadingStatus');
     const playerInfoSection = document.getElementById('playerInfoSection');
 
-    console.log('Éléments trouvés:', {
-        allyCodeInput: !!allyCodeInput,
-        loadDataBtn: !!loadDataBtn,
-        loadingStatus: !!loadingStatus,
-        playerInfoSection: !!playerInfoSection
-    });
-
     // Charge l'ally code stocké
     const storedAllyCode = getStoredAllyCode();
     if (storedAllyCode) {
         allyCodeInput.value = formatAllyCode(storedAllyCode);
-        console.log('Ally code chargé:', storedAllyCode);
     }
 
     // Format ally code input
     allyCodeInput.addEventListener('input', function(e) {
         let value = e.target.value.replace(/[^\d]/g, '');
         e.target.value = formatAllyCode(value);
-        console.log('Ally code formaté:', e.target.value);
     });
 
     // Load data button
     loadDataBtn.addEventListener('click', async function() {
-        console.log('Bouton cliqué');
         const allyCode = allyCodeInput.value.replace(/-/g, '');
         
-        console.log('Ally code saisi:', allyCode);
-        
         if (allyCode.length !== 9) {
-            console.error('Ally code invalide:', allyCode);
             showAlert('Veuillez entrer un Ally Code valide (9 chiffres)', 'error');
             return;
         }
 
         const hideLoading = showLoading(loadDataBtn);
         loadingStatus.style.display = 'block';
-
-        console.log('Envoi de la requête à /api/load_player_data');
 
         try {
             const response = await fetch('/api/load_player_data', {
@@ -214,22 +195,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({ ally_code: allyCode })
             });
 
-            console.log('Réponse reçue:', response.status);
-
             const data = await response.json();
-            console.log('Données reçues:', data);
 
             if (response.ok) {
                 saveAllyCode(allyCode);
                 showAlert('Données chargées avec succès !', 'success');
                 displayPlayerData(data);
             } else {
-                console.error('Erreur serveur:', data);
                 showAlert(data.error || 'Erreur lors du chargement des données', 'error');
             }
         } catch (error) {
-            console.error('Erreur fetch:', error);
             showAlert('Erreur de connexion au serveur', 'error');
+            console.error('Error:', error);
         } finally {
             loadingStatus.style.display = 'none';
             hideLoading();
@@ -237,8 +214,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function displayPlayerData(data) {
-        console.log('Affichage des données:', data);
-        
         // Player info
         document.getElementById('playerName').textContent = data.player.name || '-';
         document.getElementById('playerLevel').textContent = data.player.level || '-';
@@ -284,23 +259,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function formatNumber(num) {
-        if (!num) return '0';
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     }
 
     // Check if there's already loaded data
-    console.log('Vérification des données existantes...');
     fetch('/api/check_loaded_data')
         .then(response => response.json())
         .then(data => {
-            console.log('Données existantes:', data);
             if (data.has_data) {
                 displayPlayerData(data);
             }
         })
-        .catch(error => {
-            console.log('Pas de données précédentes:', error);
-        });
+        .catch(error => console.log('No previous data loaded'));
 });
 </script>
 {% endblock %}
